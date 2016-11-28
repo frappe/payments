@@ -505,7 +505,7 @@ class RazorpaySettings(Document):
 		self.save()
 
 
-		if data.get('notes', {}).get('use_sandbox'):
+		if cint(data.get('notes', {}).get('use_sandbox')):
 			settings.update({
 				"api_key": frappe.conf.sandbox_api_key,
 				"api_secret": frappe.conf.sandbox_api_secret,
