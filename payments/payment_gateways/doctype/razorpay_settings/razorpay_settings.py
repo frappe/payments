@@ -324,6 +324,59 @@ class RazorpaySettings(Document):
 
 		return kwargs
 
+	def before_get_payment_url(self, **kwargs):
+		if not kwargs.get('subscription_details') and not kwargs.get('subscription_id'):
+			return
+
+		settings = self.get_settings(kwargs)
+		if kwargs.get('subscription_id') and kwargs.get('addons'):
+			return self.setup_addon(settings, **kwargs)
+		else:
+			return self.setup_subscription(settings, **kwargs)
+
+	def setup_addon(self, settings, **kwargs):
+		url = "https://api.razorpay.com/v1/subscriptions/{0}/addons".format(kwargs.get('subscription_id'))
+
+		for addon in kwargs.get("addons"):
+			try:
+				resp = make_post_request(
+					url,
+					auth=(settings.api_key, settings.api_secret),
+					data=json.dumps(addon),
+					headers={
+						"content-type": "application/json"
+					}
+				)
+
+				if not resp.get('id'):
+					frappe.log_error(str(resp), 'Razorpay Failed while creating subscription')
+
+			except:
+				frappe.log_error(frappe.get_traceback())
+				# failed
+				pass
+
+		return {}
+
+	def setup_subscription(self, settings, **kwargs):
+		try:
+			resp = make_post_request(
+				"https://api.razorpay.com/v1/subscriptions",
+				auth=(settings.api_key, settings.api_secret),
+				data=kwargs.get('subscription_details')
+			)
+
+			if resp.get('status') == 'created':
+				kwargs['subscription_details']['subscription_id'] = resp.get('id')
+			else:
+				frappe.log_error(str(resp), 'Razorpay Failed while creating subscription')
+
+			return kwargs
+		except:
+			frappe.log_error(frappe.get_traceback())
+			# failed
+			pass
+
 	def get_payment_url(self, **kwargs):
 		if not kwargs.get("order_id"):
 			order = self.create_order(**kwargs)
@@ -505,7 +558,7 @@ class RazorpaySettings(Document):
 		self.save()
 
 
-		if cint(data.get('notes', {}).get('use_sandbox')):
+		if cint(data.get('notes', {}).get('use_sandbox')) or data.get("use_sandbox"):
 			settings.update({
 				"api_key": frappe.conf.sandbox_api_key,
 				"api_secret": frappe.conf.sandbox_api_secret,
