@@ -367,6 +367,7 @@ class RazorpaySettings(Document):
 			"start_at": cint(start_date),
 			"total_count": kwargs.get('subscription_details').get("billing_frequency"),
 			"customer_notify": kwargs.get('subscription_details').get("customer_notify"),
+			"upfront_amount": kwargs.get('subscription_details').get("upfront_amount")
 		}
 
 		try:
