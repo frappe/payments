@@ -216,6 +216,26 @@ class PayPalSettings(Document):
 			frappe.throw(_("Looks like something is wrong with this site's Paypal configuration."))
 
 		return response
+	
+	def cancel_recurring_profile(self, **kwargs):
+		params, url = self.get_paypal_params_and_url()
+
+		if not kwargs.get('profile_id'):
+			frappe.throw(_("PayPal Recurring Profile ID is required"))
+
+		params.update({
+			"METHOD": "ManageRecurringPaymentsProfileStatus",
+			"PROFILEID": kwargs['profile_id'],
+			"ACTION": "Cancel"
+		})
+
+		params = urlencode(params)
+
+		response = make_post_request(url, data=params.encode("utf-8"))
+		if response.get("ACK")[0] != "Success":
+			frappe.throw(_("Looks like something is wrong with this site's Paypal configuration."))
+
+		return response
 
 	def configure_recurring_payments(self, params, kwargs):
 		# removing the params as we have to setup rucurring payments
