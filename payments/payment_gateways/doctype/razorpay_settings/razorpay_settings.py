@@ -324,39 +324,42 @@ class RazorpaySettings(Document):
 
 		return kwargs
 
-	# def before_get_payment_url(self, **kwargs):
-	# 	if not kwargs.get('subscription_details') and not kwargs.get('subscription_id'):
-	# 		return
-	#
-	# 	settings = self.get_settings(kwargs)
-	# 	if kwargs.get('subscription_id') and kwargs.get('addons'):
-	# 		return self.setup_addon(settings, **kwargs)
-	# 	else:
-	# 		return self.setup_subscription(settings, **kwargs)
-	#
-	# def setup_addon(self, settings, **kwargs):
-	# 	url = "https://api.razorpay.com/v1/subscriptions/{0}/addons".format(kwargs.get('subscription_id'))
-	#
-	# 	for addon in kwargs.get("addons"):
-	# 		try:
-	# 			resp = make_post_request(
-	# 				url,
-	# 				auth=(settings.api_key, settings.api_secret),
-	# 				data=json.dumps(addon),
-	# 				headers={
-	# 					"content-type": "application/json"
-	# 				}
-	# 			)
-	#
-	# 			if not resp.get('id'):
-	# 				frappe.log_error(str(resp), 'Razorpay Failed while creating subscription')
-	#
-	# 		except:
-	# 			frappe.log_error(frappe.get_traceback())
-	# 			# failed
-	# 			pass
-	#
-	# 	return {}
+	def setup_addon(self, settings, **kwargs):
+		"""
+			Addon template:
+			{
+				"item": {
+					"name": row.upgrade_type,
+					"amount": row.amount,
+					"currency": currency,
+					"description": "add-on description"
+				},
+				"quantity": 1 (The total amount is calculated as item.amount * quantity)
+			}
+		"""
+		
+		url = "https://api.razorpay.com/v1/subscriptions/{0}/addons".format(kwargs.get('subscription_id'))
+
+		for addon in kwargs.get("addons"):
+			try:
+				addon['item']['amount'] *= 100 #convert amount to paisa
+
+				resp = make_post_request(
+					url,
+					auth=(settings.api_key, settings.api_secret),
+					data=json.dumps(addon),
+					headers={
+						"content-type": "application/json"
+					}
+				)
+
+				if not resp.get('id'):
+					frappe.log_error(str(resp), 'Razorpay Failed while creating subscription')
+
+			except:
+				frappe.log_error(frappe.get_traceback())
+				# failed
+				pass
 
 	def setup_subscription(self, settings, **kwargs):
 		start_date = get_timestamp(kwargs.get('subscription_details').get("start_date")) \
@@ -378,7 +381,8 @@ class RazorpaySettings(Document):
 			)
 
 			if resp.get('status') == 'created':
-				kwargs['subscription_details']['subscription_id'] = resp.get('id')
+				kwargs['subscription_id'] = resp.get('id')
+				return kwargs
 			else:
 				frappe.log_error(str(resp), 'Razorpay Failed while creating subscription')
 
@@ -386,6 +390,16 @@ class RazorpaySettings(Document):
 			frappe.log_error(frappe.get_traceback())
 			# failed
 			pass
+
+	def prepare_subscription_details(self, settings, **kwargs):
+		if kwargs.get('subscription_details'):
+			kwargs = self.setup_subscription(settings, **kwargs)
+
+		if kwargs.get("subscription_id") and kwargs.get("addons"):
+			self.setup_addon(settings, **kwargs)
+			kwargs['subscription_id'] = None
+
+		return kwargs
 
 	def get_payment_url(self, **kwargs):
 		if not kwargs.get("order_id"):
