@@ -78,6 +78,9 @@ from payments.utils import create_payment_gateway
 api_path = "/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
 
 
+
+api_path = '/api/method/frappe.integrations.doctype.paypal_settings.paypal_settings'
+
 class PayPalSettings(Document):
 	supported_currencies = (
 		"AUD",
@@ -216,26 +219,44 @@ class PayPalSettings(Document):
 			frappe.throw(_("Looks like something is wrong with this site's Paypal configuration."))
 
 		return response
-	
-	def cancel_recurring_profile(self, **kwargs):
-		params, url = self.get_paypal_params_and_url()
 
-		if not kwargs.get('profile_id'):
-			frappe.throw(_("PayPal Recurring Profile ID is required"))
+	def configure_recurring_payments(self, params, kwargs):
+		# removing the params as we have to setup rucurring payments
+		for param in ('PAYMENTREQUEST_0_PAYMENTACTION', 'PAYMENTREQUEST_0_AMT',
+			'PAYMENTREQUEST_0_CURRENCYCODE'):
+			del params[param]
 
 		params.update({
-			"METHOD": "ManageRecurringPaymentsProfileStatus",
-			"PROFILEID": kwargs['profile_id'],
-			"ACTION": "Cancel"
+			"L_BILLINGTYPE0": "RecurringPayments",  #The type of billing agreement
+			"L_BILLINGAGREEMENTDESCRIPTION0": kwargs['description']
 		})
 
-		params = urlencode(params)
+def get_paypal_and_transaction_details(token):
+	doc = frappe.get_doc("PayPal Settings")
+	doc.setup_sandbox_env(token)
+	params, url = doc.get_paypal_params_and_url()
 
-		response = make_post_request(url, data=params.encode("utf-8"))
-		if response.get("ACK")[0] != "Success":
-			frappe.throw(_("Looks like something is wrong with this site's Paypal configuration."))
+	integration_request = frappe.get_doc("Integration Request", token)
+	data = json.loads(integration_request.data)
 
-		return response
+	return data, params, url
+
+def setup_redirect(data, redirect_url, custom_redirect_to=None, redirect=True):
+	redirect_to = data.get('redirect_to') or None
+	redirect_message = data.get('redirect_message') or None
+
+	if custom_redirect_to:
+		redirect_to = custom_redirect_to
+
+	if redirect_to:
+		redirect_url += '?' + urlencode({'redirect_to': redirect_to})
+	if redirect_message:
+		redirect_url += '&' + urlencode({'redirect_message': redirect_message})
+
+	# this is done so that functions called via hooks can update flags.redirect_to
+	if redirect:
+		frappe.local.response["type"] = "redirect"
+		frappe.local.response["location"] = get_url(redirect_url)
 
 	def configure_recurring_payments(self, params, kwargs):
 		# removing the params as we have to setup rucurring payments
