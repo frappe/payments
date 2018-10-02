@@ -352,7 +352,6 @@ class RazorpaySettings(Document):
 						"content-type": "application/json"
 					}
 				)
-
 				if not resp.get('id'):
 					frappe.log_error(str(resp), 'Razorpay Failed while creating subscription')
 		except:
