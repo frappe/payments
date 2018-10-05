@@ -721,7 +721,6 @@ def convert_rupee_to_paisa(**kwargs):
 
 	frappe.conf.converted_rupee_to_paisa = True
 
-
 @frappe.whitelist(allow_guest=True)
 def razorpay_subscription_callback():
 	try:
