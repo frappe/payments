@@ -249,7 +249,7 @@ def setup_redirect(data, redirect_url, custom_redirect_to=None, redirect=True):
 		redirect_to = custom_redirect_to
 
 	if redirect_to:
-		redirect_url += '?' + urlencode({'redirect_to': redirect_to})
+		redirect_url += '&' + urlencode({'redirect_to': redirect_to})
 	if redirect_message:
 		redirect_url += '&' + urlencode({'redirect_message': redirect_message})
 
