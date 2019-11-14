@@ -749,6 +749,12 @@ def order_payment_failure(integration_request, params):
 	integration.update_status(params, integration.status)
 
 
+
+@frappe.whitelist(allow_guest=True)
+def get_api_key():
+	controller = frappe.get_doc("Razorpay Settings")
+	return controller.api_key
+
 @frappe.whitelist(allow_guest=True)
 def get_order(doctype, docname):
 	# Order returned to be consumed by razorpay.js
