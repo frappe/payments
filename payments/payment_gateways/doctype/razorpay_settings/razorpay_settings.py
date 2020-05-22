@@ -635,6 +635,27 @@ class RazorpaySettings(Document):
 		except Exception:
 			frappe.log_error(frappe.get_traceback())
 
+	def verify_signature(self, body, signature, key):
+		if sys.version_info[0] == 3:
+			key = bytes(key, 'utf-8')
+			body = bytes(body, 'utf-8')
+
+		dig = hmac.new(key=key,
+					   msg=body,
+					   digestmod=hashlib.sha256)
+
+		generated_signature = dig.hexdigest()
+
+		if sys.version_info[0:3] < (2, 7, 7):
+			result = self.compare_string(generated_signature, signature)
+		else:
+			result = hmac.compare_digest(generated_signature, signature)
+
+		if not result:
+			frappe.throw(_('Razorpay Signature Verification Failed'), exc=frappe.PermissionError)
+
+		return result
+
 def capture_payment(is_sandbox=False, sanbox_response=None):
 	"""
 	Verifies the purchase as complete by the merchant.
