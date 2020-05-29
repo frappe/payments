@@ -636,18 +636,13 @@ class RazorpaySettings(Document):
 			frappe.log_error(frappe.get_traceback())
 
 	def verify_signature(self, body, signature, key):
-		if six.PY3:
-			key = bytes(key, 'utf-8')
-			body = bytes(body, 'utf-8')
+		key = bytes(key, 'utf-8')
+		body = bytes(body, 'utf-8')
 
 		dig = hmac.new(key=key, msg=body, digestmod=hashlib.sha256)
 
 		generated_signature = dig.hexdigest()
-
-		if six.PY2:
-			result = self.compare_string(generated_signature, signature)
-		else:
-			result = hmac.compare_digest(generated_signature, signature)
+		result = hmac.compare_digest(generated_signature, signature)
 
 		if not result:
 			frappe.throw(_('Razorpay Signature Verification Failed'), exc=frappe.PermissionError)
