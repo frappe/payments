@@ -2,6 +2,7 @@
 # License: MIT. See LICENSE
 
 import frappe
+
 no_cache = True
 
 no_cache = True

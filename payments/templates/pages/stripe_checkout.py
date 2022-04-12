@@ -2,6 +2,7 @@
 # License: MIT. See LICENSE
 import json
 from frappe.integrations.doctype.stripe_settings.stripe_settings import get_gateway_controller
+from frappe.utils import cint, fmt_money
 
 import frappe
 from frappe import _
@@ -68,6 +69,7 @@ def get_api_key(doc, gateway_controller):
 
 def get_header_image(doc, gateway_controller):
 	return frappe.db.get_value("Stripe Settings", gateway_controller, "header_img")
+
 
 
 @frappe.whitelist(allow_guest=True)

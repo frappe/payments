@@ -23,6 +23,7 @@ from paytmchecksum import generateSignature, verifySignature
 from payments.utils import create_payment_gateway
 
 
+
 class PaytmSettings(Document):
 	supported_currencies = ("INR",)
 
