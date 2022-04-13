@@ -460,7 +460,7 @@ class RazorpaySettings(Document):
 		kwargs["amount"] *= 100
 
 		# Create integration log
-		integration_request = create_request_log(kwargs, "Host", "Razorpay")
+		integration_request = create_request_log(kwargs, service_name="Razorpay")
 
 		# Setup payment options
 		payment_options = {
