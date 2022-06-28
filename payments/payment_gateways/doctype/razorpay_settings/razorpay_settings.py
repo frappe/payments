@@ -359,8 +359,8 @@ class RazorpaySettings(Document):
 				)
 				if not resp.get("id"):
 					frappe.log_error(message=str(resp), title="Razorpay Failed while creating subscription")
-		except:
-			frappe.log_error(frappe.get_traceback())
+		except Exception:
+			frappe.log_error()
 			# failed
 			pass
 
@@ -399,10 +399,8 @@ class RazorpaySettings(Document):
 			else:
 				frappe.log_error(message=str(resp), title="Razorpay Failed while creating subscription")
 
-		except:
-			frappe.log_error(frappe.get_traceback())
-			# failed
-			pass
+		except Exception:
+			frappe.log_error()
 
 	def prepare_subscription_details(self, settings, **kwargs):
 		if not kwargs.get("subscription_id"):
