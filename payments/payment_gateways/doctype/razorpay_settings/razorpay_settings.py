@@ -636,7 +636,7 @@ class RazorpaySettings(Document):
 
 		try:
 			resp = make_post_request(
-				"https://api.razorpay.com/v1/subscriptions/{0}/cancel".format(subscription_id),
+				f"https://api.razorpay.com/v1/subscriptions/{subscription_id}/cancel",
 				auth=(settings.api_key, settings.api_secret),
 			)
 		except Exception:
