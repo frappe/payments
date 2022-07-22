@@ -1,6 +1,6 @@
 from . import __version__ as app_version
 
-app_name = "pay"
+app_name = "payments"
 app_title = "Payments"
 app_publisher = "Frappe Technologies"
 app_description = "Payments app for frappe"

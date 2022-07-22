@@ -3,5 +3,5 @@
 *.egg-info
 *.swp
 tags
-pay/docs/current
+payments/docs/current
 node_modules/

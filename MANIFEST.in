@@ -4,15 +4,15 @@ include *.json
 include *.md
 include *.py
 include *.txt
-recursive-include pay *.css
-recursive-include pay *.csv
-recursive-include pay *.html
-recursive-include pay *.ico
-recursive-include pay *.js
-recursive-include pay *.json
-recursive-include pay *.md
-recursive-include pay *.png
-recursive-include pay *.py
-recursive-include pay *.svg
-recursive-include pay *.txt
-recursive-exclude pay *.pyc
+recursive-include payments *.css
+recursive-include payments *.csv
+recursive-include payments *.html
+recursive-include payments *.ico
+recursive-include payments *.js
+recursive-include payments *.json
+recursive-include payments *.md
+recursive-include payments *.png
+recursive-include payments *.py
+recursive-include payments *.svg
+recursive-include payments *.txt
+recursive-exclude payments *.pyc
