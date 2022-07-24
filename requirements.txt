@@ -1,1 +1,6 @@
 # frappe -- https://github.com/frappe/frappe is installed via 'bench init'
+paytmchecksum~=1.7.0
+razorpay~=1.2.0
+stripe~=2.56.0
+braintree~=4.8.0
+
