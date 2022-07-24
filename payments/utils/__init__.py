@@ -1,4 +1,4 @@
-from utils import (
+from payments.utils.utils import (
     get_payment_gateway_controller,
     create_payment_gateway,
     make_custom_fields,
