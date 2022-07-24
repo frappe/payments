@@ -32,7 +32,7 @@ function setOutcome(result) {
 		$('#submit').prop('disabled', true)
 		$('#submit').html(__('Processing...'))
 		frappe.call({
-			method:"frappe.templates.pages.integrations.stripe_checkout.make_payment",
+			method:"payments.templates.pages.stripe_checkout.make_payment",
 			freeze:true,
 			headers: {"X-Requested-With": "XMLHttpRequest"},
 			args: {

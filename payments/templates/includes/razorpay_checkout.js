@@ -31,7 +31,7 @@ razorpay.make_payment_log = function(response, options, doctype, docname, token)
 	$('.razorpay-confirming').removeClass('hidden');
 
 	frappe.call({
-		method:"frappe.templates.pages.integrations.razorpay_checkout.make_payment",
+		method:"payments.templates.pages.razorpay_checkout.make_payment",
 		freeze:true,
 		headers: {"X-Requested-With": "XMLHttpRequest"},
 		args: {

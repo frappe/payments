@@ -21,7 +21,7 @@ $(document).ready(function() {
 					return;
 				}
 				frappe.call({
-					method: "frappe.templates.pages.integrations.braintree_checkout.make_payment",
+					method: "payments.templates.pages.braintree_checkout.make_payment",
 					freeze: true,
 					headers: {
 						"X-Requested-With": "XMLHttpRequest"
