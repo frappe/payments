@@ -67,8 +67,11 @@ from urllib.parse import urlencode
 import frappe
 import razorpay
 from frappe import _
-from frappe.integrations.utils import (create_request_log, make_get_request,
-                                       make_post_request)
+from frappe.integrations.utils import (
+	create_request_log,
+	make_get_request,
+	make_post_request,
+)
 from frappe.model.document import Document
 from frappe.utils import call_hook_method, cint, get_timestamp, get_url
 
@@ -198,7 +201,7 @@ class RazorpaySettings(Document):
 
 	def get_payment_url(self, **kwargs):
 		integration_request = create_request_log(kwargs, service_name="Razorpay")
-		return get_url(f"./integrations/razorpay_checkout?token={integration_request.name}")
+		return get_url(f"./razorpay_checkout?token={integration_request.name}")
 
 	def create_order(self, **kwargs):
 		# Creating Orders https://razorpay.com/docs/api/orders/
@@ -504,7 +507,7 @@ def razorpay_subscription_callback():
 		frappe.db.commit()
 
 		frappe.enqueue(
-			method="frappe.integrations.doctype.razorpay_settings.razorpay_settings.handle_subscription_notification",
+			method="payments.payment_gateways.doctype.razorpay_settings.razorpay_settings.handle_subscription_notification",
 			queue="long",
 			timeout=600,
 			is_async=True,

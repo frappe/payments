@@ -33,9 +33,9 @@
   }
  ],
  "links": [],
- "modified": "2022-01-24 21:17:03.864719",
+ "modified": "2022-07-24 21:17:03.864719",
  "modified_by": "Administrator",
- "module": "Core",
+ "module": "Payments",
  "name": "Payment Gateway",
  "naming_rule": "By fieldname",
  "owner": "Administrator",

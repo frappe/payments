@@ -188,7 +188,7 @@ class StripeSettings(Document):
 				)
 
 	def get_payment_url(self, **kwargs):
-		return get_url(f"./integrations/stripe_checkout?{urlencode(kwargs)}")
+		return get_url(f"./stripe_checkout?{urlencode(kwargs)}")
 
 	def create_request(self, data):
 		import stripe

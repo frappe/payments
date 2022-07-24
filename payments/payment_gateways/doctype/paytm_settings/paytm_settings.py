@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 
 import requests
 from paytmchecksum import generateSignature, verifySignature
+
 import frappe
 from frappe import _
 from frappe.integrations.utils import create_request_log
@@ -37,7 +38,7 @@ class PaytmSettings(Document):
 		integration_request = create_request_log(kwargs, service_name="Paytm")
 		kwargs.update(dict(order_id=integration_request.name))
 
-		return get_url(f"./integrations/paytm_checkout?{urlencode(kwargs)}")
+		return get_url(f"./paytm_checkout?{urlencode(kwargs)}")
 
 
 def get_paytm_config():
@@ -74,7 +75,7 @@ def get_paytm_params(payment_details, order_id, paytm_config):
 
 	redirect_uri = (
 		get_request_site_address(True)
-		+ "/api/method/frappe.integrations.doctype.paytm_settings.paytm_settings.verify_transaction"
+		+ "/api/method/payments.payment_gateways.doctype.paytm_settings.paytm_settings.verify_transaction"
 	)
 
 	paytm_params.update(
@@ -160,10 +161,10 @@ def finalize_request(order_id, transaction_response):
 			if custom_redirect_to:
 				redirect_to = custom_redirect_to
 
-			redirect_url = "/integrations/payment-success"
+			redirect_url = "payment-success"
 	else:
 		request.db_set("status", "Failed")
-		redirect_url = "/integrations/payment-failed"
+		redirect_url = "payment-failed"
 
 	if redirect_to:
 		redirect_url += "?" + urlencode({"redirect_to": redirect_to})

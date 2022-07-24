@@ -187,7 +187,7 @@ class BraintreeSettings(Document):
 			)
 
 	def get_payment_url(self, **kwargs):
-		return get_url(f"./integrations/braintree_checkout?{urlencode(kwargs)}")
+		return get_url(f"./braintree_checkout?{urlencode(kwargs)}")
 
 	def create_payment_request(self, data):
 		self.data = frappe._dict(data)

@@ -4,7 +4,8 @@ import json
 
 import frappe
 from frappe import _
-from frappe.integrations.doctype.paytm_settings.paytm_settings import (
+
+from payments.payment_gateways.doctype.paytm_settings.paytm_settings import (
 	get_paytm_config,
 	get_paytm_params,
 )

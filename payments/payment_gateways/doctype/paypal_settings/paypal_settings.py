@@ -75,7 +75,7 @@ from frappe.utils import call_hook_method, cint, get_datetime, get_url
 
 from payments.utils import create_payment_gateway
 
-api_path = "/api/method/frappe.integrations.doctype.paypal_settings.paypal_settings"
+api_path = "/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
 
 
 class PayPalSettings(Document):
@@ -335,11 +335,11 @@ def confirm_payment(token):
 				).run_method("on_payment_authorized", "Completed")
 				frappe.db.commit()
 
-			redirect_url = "/integrations/payment-success?doctype={}&docname={}".format(
+			redirect_url = "payment-success?doctype={}&docname={}".format(
 				data.get("reference_doctype"), data.get("reference_docname")
 			)
 		else:
-			redirect_url = "/integrations/payment-failed"
+			redirect_url = "payment-failed"
 
 		setup_redirect(data, redirect_url, custom_redirect_to)
 
@@ -410,11 +410,11 @@ def create_recurring_profile(token, payerid):
 				).run_method("on_payment_authorized", status_changed_to)
 				frappe.db.commit()
 
-			redirect_url = "/integrations/payment-success?doctype={}&docname={}".format(
+			redirect_url = "payment-success?doctype={}&docname={}".format(
 				data.get("reference_doctype"), data.get("reference_docname")
 			)
 		else:
-			redirect_url = "/integrations/payment-failed"
+			redirect_url = "payment-failed"
 
 		setup_redirect(data, redirect_url, custom_redirect_to)
 
@@ -480,7 +480,7 @@ def ipn_handler():
 		frappe.db.commit()
 
 		frappe.enqueue(
-			method="frappe.integrations.doctype.paypal_settings.paypal_settings.handle_subscription_notification",
+			method="payments.payment_gateways.doctype.paypal_settings.paypal_settings.handle_subscription_notification",
 			queue="long",
 			timeout=600,
 			is_async=True,
