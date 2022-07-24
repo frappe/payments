@@ -5,14 +5,11 @@ from urllib.parse import urlencode
 
 import frappe
 from frappe import _
-from frappe.integrations.utils import (
-	create_payment_gateway,
-	create_request_log,
-	make_get_request,
-	make_post_request,
-)
+from frappe.integrations.utils import create_request_log, make_get_request
 from frappe.model.document import Document
 from frappe.utils import call_hook_method, cint, flt, get_url
+
+from payments.utils import create_payment_gateway
 
 
 class StripeSettings(Document):
@@ -153,7 +150,9 @@ class StripeSettings(Document):
 
 	def on_update(self):
 		create_payment_gateway(
-			"Stripe-" + self.gateway_name, settings="Stripe Settings", controller=self.gateway_name
+			"Stripe-" + self.gateway_name,
+			settings="Stripe Settings",
+			controller=self.gateway_name,
 		)
 		call_hook_method("payment_gateway_enabled", gateway="Stripe-" + self.gateway_name)
 		if not self.flags.ignore_mandatory:

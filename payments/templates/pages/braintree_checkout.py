@@ -6,7 +6,7 @@ import json
 import frappe
 from frappe import _
 from frappe.integrations.doctype.braintree_settings.braintree_settings import (
-	get_client_token,
+    get_client_token,
 	get_gateway_controller,
 )
 from frappe.utils import flt
@@ -46,7 +46,9 @@ def get_context(context):
 	else:
 		frappe.redirect_to_message(
 			_("Some information is missing"),
-			_("Looks like someone sent you to an incomplete URL. Please ask them to look into it."),
+			_(
+				"Looks like someone sent you to an incomplete URL. Please ask them to look into it."
+			),
 		)
 		frappe.local.flags.redirect_location = frappe.local.response.location
 		raise frappe.Redirect
@@ -59,6 +61,8 @@ def make_payment(payload_nonce, data, reference_doctype, reference_docname):
 	data.update({"payload_nonce": payload_nonce})
 
 	gateway_controller = get_gateway_controller(reference_docname)
-	data = frappe.get_doc("Braintree Settings", gateway_controller).create_payment_request(data)
+	data = frappe.get_doc("Braintree Settings", gateway_controller).create_payment_request(
+		data
+	)
 	frappe.db.commit()
 	return data

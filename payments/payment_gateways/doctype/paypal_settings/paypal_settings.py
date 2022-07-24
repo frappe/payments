@@ -8,7 +8,7 @@
 
 Example:
 
-	from frappe.integrations.utils import get_payment_gateway_controller
+	from payments.utils import get_payment_gateway_controller
 
 	controller = get_payment_gateway_controller("PayPal")
 	controller().validate_transaction_currency(currency)
@@ -69,9 +69,11 @@ import pytz
 
 import frappe
 from frappe import _
-from frappe.integrations.utils import create_payment_gateway, create_request_log, make_post_request
+from frappe.integrations.utils import create_request_log, make_post_request
 from frappe.model.document import Document
 from frappe.utils import call_hook_method, cint, get_datetime, get_url
+
+from payments.utils import create_payment_gateway
 
 api_path = "/api/method/frappe.integrations.doctype.paypal_settings.paypal_settings"
 
@@ -179,7 +181,10 @@ class PayPalSettings(Document):
 			return_url = "https://www.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token={0}"
 
 		kwargs.update(
-			{"token": response.get("TOKEN")[0], "correlation_id": response.get("CORRELATIONID")[0]}
+			{
+				"token": response.get("TOKEN")[0],
+				"correlation_id": response.get("CORRELATIONID")[0],
+			}
 		)
 
 		create_request_log(kwargs, service_name="PayPal", name=kwargs["token"])
@@ -373,7 +378,9 @@ def create_recurring_profile(token, payerid):
 			}
 		)
 
-		status_changed_to = "Completed" if data.get("starting_immediately") or updating else "Verified"
+		status_changed_to = (
+			"Completed" if data.get("starting_immediately") or updating else "Verified"
+		)
 
 		starts_at = get_datetime(subscription_details.get("start_date")) or frappe.utils.now_datetime()
 		starts_at = starts_at.replace(tzinfo=pytz.timezone(frappe.utils.get_time_zone())).astimezone(
@@ -433,7 +440,11 @@ def get_redirect_uri(doc, token, payerid):
 
 def manage_recurring_payment_profile_status(profile_id, action, args, url):
 	args.update(
-		{"METHOD": "ManageRecurringPaymentsProfileStatus", "PROFILEID": profile_id, "ACTION": action}
+		{
+			"METHOD": "ManageRecurringPaymentsProfileStatus",
+			"PROFILEID": profile_id,
+			"ACTION": action,
+		}
 	)
 
 	response = make_post_request(url, data=args)
@@ -442,7 +453,9 @@ def manage_recurring_payment_profile_status(profile_id, action, args, url):
 	# thus could not cancel the subscription.
 	# thus raise an exception only if the error code is not equal to 11556
 
-	if response.get("ACK")[0] != "Success" and response.get("L_ERRORCODE0", [])[0] != "11556":
+	if (
+		response.get("ACK")[0] != "Success" and response.get("L_ERRORCODE0", [])[0] != "11556"
+	):
 		frappe.throw(_("Failed while amending subscription"))
 
 
@@ -491,7 +504,10 @@ def validate_ipn_request(data):
 	params, url = doc.get_paypal_params_and_url()
 
 	params.update(
-		{"METHOD": "GetRecurringPaymentsProfileDetails", "PROFILEID": data.get("recurring_payment_id")}
+		{
+			"METHOD": "GetRecurringPaymentsProfileDetails",
+			"PROFILEID": data.get("recurring_payment_id"),
+		}
 	)
 
 	params = urlencode(params)

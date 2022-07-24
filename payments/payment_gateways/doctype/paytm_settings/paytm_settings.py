@@ -6,13 +6,14 @@ from urllib.parse import urlencode
 
 import requests
 from paytmchecksum import generateSignature, verifySignature
-
 import frappe
 from frappe import _
-from frappe.integrations.utils import create_payment_gateway, create_request_log
+from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
 from frappe.utils import call_hook_method, cint, cstr, flt, get_request_site_address, get_url
 from frappe.utils.password import get_decrypted_password
+
+from payments.utils import create_payment_gateway
 
 
 class PaytmSettings(Document):

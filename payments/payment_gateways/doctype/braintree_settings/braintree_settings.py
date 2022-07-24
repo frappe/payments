@@ -7,9 +7,11 @@ import braintree
 
 import frappe
 from frappe import _
-from frappe.integrations.utils import create_payment_gateway, create_request_log
+from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
 from frappe.utils import call_hook_method, get_url
+
+from payments.utils import create_payment_gateway
 
 
 class BraintreeSettings(Document):
@@ -157,7 +159,9 @@ class BraintreeSettings(Document):
 
 	def on_update(self):
 		create_payment_gateway(
-			"Braintree-" + self.gateway_name, settings="Braintree Settings", controller=self.gateway_name
+			"Braintree-" + self.gateway_name,
+			settings="Braintree Settings",
+			controller=self.gateway_name,
 		)
 		call_hook_method("payment_gateway_enabled", gateway="Braintree-" + self.gateway_name)
 
@@ -237,7 +241,8 @@ class BraintreeSettings(Document):
 			self.integration_request.db_set("status", "Failed", update_modified=False)
 			for error in result.errors.deep_errors:
 				error_log = frappe.log_error(
-					"code: " + str(error.code) + " | message: " + str(error.message), "Braintree Payment Error"
+					"code: " + str(error.code) + " | message: " + str(error.message),
+					"Braintree Payment Error",
 				)
 				self.integration_request.db_set("error", error_log.error, update_modified=False)
 

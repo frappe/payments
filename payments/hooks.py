@@ -64,12 +64,12 @@ app_license = "MIT"
 # ------------
 
 # before_install = "pay.install.before_install"
-# after_install = "pay.install.after_install"
+after_install = "payments.utils.make_custom_fields"
 
 # Uninstallation
 # ------------
 
-# before_uninstall = "pay.uninstall.before_uninstall"
+before_uninstall = "payments.utils.delete_custom_fields"
 # after_uninstall = "pay.uninstall.after_uninstall"
 
 # Desk Notifications
@@ -94,9 +94,9 @@ app_license = "MIT"
 # ---------------
 # Override standard doctype classes
 
-# override_doctype_class = {
-# 	"ToDo": "custom_app.overrides.CustomToDo"
-# }
+override_doctype_class = {
+	"Web Form": "payments.overrides.paymentwebform.PaymentWebForm"
+}
 
 # Document Events
 # ---------------
@@ -113,23 +113,11 @@ app_license = "MIT"
 # Scheduled Tasks
 # ---------------
 
-# scheduler_events = {
-# 	"all": [
-# 		"pay.tasks.all"
-# 	],
-# 	"daily": [
-# 		"pay.tasks.daily"
-# 	],
-# 	"hourly": [
-# 		"pay.tasks.hourly"
-# 	],
-# 	"weekly": [
-# 		"pay.tasks.weekly"
-# 	],
-# 	"monthly": [
-# 		"pay.tasks.monthly"
-# 	],
-# }
+scheduler_events = {
+	"all": [
+		"payments.payment_gateways.doctype.razorpay_settings.razorpay_settings.capture_payment",
+	],
+}
 
 # Testing
 # -------
