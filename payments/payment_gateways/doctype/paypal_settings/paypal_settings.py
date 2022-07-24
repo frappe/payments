@@ -78,6 +78,8 @@ from payments.utils import create_payment_gateway
 api_path = "/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
 
 
+from payments.utils import create_payment_gateway
+
 api_path = "/api/method/frappe.integrations.doctype.paypal_settings.paypal_settings"
 
 
@@ -425,7 +427,9 @@ def create_recurring_profile(token, payerid):
 			}
 		)
 
-		status_changed_to = "Completed" if data.get("starting_immediately") or updating else "Verified"
+		status_changed_to = (
+			"Completed" if data.get("starting_immediately") or updating else "Verified"
+		)
 
 		starts_at = get_datetime(subscription_details.get("start_date")) or frappe.utils.now_datetime()
 		starts_at = starts_at.replace(tzinfo=ZoneInfo(get_system_timezone())).astimezone(ZoneInfo("UTC"))
@@ -497,7 +501,9 @@ def manage_recurring_payment_profile_status(profile_id, action, args, url):
 	# thus could not cancel the subscription.
 	# thus raise an exception only if the error code is not equal to 11556
 
-	if response.get("ACK")[0] != "Success" and response.get("L_ERRORCODE0", [])[0] != "11556":
+	if (
+		response.get("ACK")[0] != "Success" and response.get("L_ERRORCODE0", [])[0] != "11556"
+	):
 		frappe.throw(_("Failed while amending subscription"))
 
 
