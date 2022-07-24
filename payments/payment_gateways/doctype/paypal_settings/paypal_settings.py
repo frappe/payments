@@ -80,7 +80,7 @@ api_path = "/api/method/payments.payment_gateways.doctype.paypal_settings.paypal
 
 from payments.utils import create_payment_gateway
 
-api_path = "/api/method/frappe.integrations.doctype.paypal_settings.paypal_settings"
+api_path = "/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
 
 
 class PayPalSettings(Document):
