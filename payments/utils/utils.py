@@ -54,7 +54,7 @@ def create_payment_gateway(gateway, settings=None, controller=None):
 
 
 def make_custom_fields():
-	if not frappe.get_meta("Web Form").has_field("payments"):
+	if not frappe.get_meta("Web Form").has_field("payments_tab"):
 		click.secho("* Installing Payment Custom Fields in Web Form")
 
 		create_custom_fields({
