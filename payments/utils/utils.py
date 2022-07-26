@@ -2,6 +2,7 @@ import click
 
 import frappe
 from frappe import _
+from frappe.utils.data import cint
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 
@@ -133,6 +134,8 @@ def make_custom_fields():
 			]
 		})
 
+		frappe.clear_cache(doctype="Web Form")
+
 
 def delete_custom_fields():
 	if frappe.get_meta("Web Form").has_field("payments_tab"):
@@ -156,3 +159,11 @@ def delete_custom_fields():
 				"Custom Field",
 				{"name": "Web Form-" + fieldname}
 			)
+
+		frappe.clear_cache(doctype="Web Form")
+
+
+def before_install():
+	# only install for v14
+	if cint(frappe.get_module("frappe").__version__[:2]) < 14 or not frappe.get_meta("Module Def").has_field("custom"):
+		return False

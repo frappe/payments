@@ -63,7 +63,7 @@ app_license = "MIT"
 # Installation
 # ------------
 
-# before_install = "pay.install.before_install"
+before_install = "payments.utils.before_install"
 after_install = "payments.utils.make_custom_fields"
 
 # Uninstallation
