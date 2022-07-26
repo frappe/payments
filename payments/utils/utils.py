@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import click
 import frappe
 from frappe import _
+from frappe.utils.data import cint
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 
@@ -159,6 +160,8 @@ def make_custom_fields():
 		}
 
 		create_custom_fields(custom_fields)
+
+		frappe.clear_cache(doctype="Web Form")
 
 
 def delete_custom_fields():
