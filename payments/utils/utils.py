@@ -2,7 +2,6 @@ import click
 
 import frappe
 from frappe import _
-from frappe.utils.data import cint
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 
@@ -164,6 +163,13 @@ def delete_custom_fields():
 
 
 def before_install():
-	# only install for v14
-	if cint(frappe.get_module("frappe").__version__[:2]) < 14 or not frappe.get_meta("Module Def").has_field("custom"):
+	# TODO: remove this
+	# This is done for erpnext CI patch test
+	#
+	# Since we follow a flow like install v14 -> restore v10 site
+	# -> migrate to v12, v13 and then v14 again
+	#
+	# This app fails installing when the site is restored to v10 as
+	# a lot of apis don;t exist in v10 and this is a (at the moment) required app for erpnext.
+	if not frappe.get_meta("Module Def").has_field("custom"):
 		return False
