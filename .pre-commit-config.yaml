@@ -32,11 +32,6 @@ repos:
       - id: black
         additional_dependencies: ['click==8.0.4']
 
-  - repo: https://github.com/timothycrosley/isort
-    rev: 5.9.1
-    hooks:
-      - id: isort
-
   - repo: https://gitlab.com/pycqa/flake8
     rev: 3.9.2
     hooks:

@@ -6,8 +6,9 @@ import frappe
 from frappe import _
 from frappe.utils import cint, fmt_money
 
-from payments.payment_gateways.doctype.stripe_settings.stripe_settings import \
-    get_gateway_controller
+from payments.payment_gateways.doctype.stripe_settings.stripe_settings import (
+	get_gateway_controller,
+)
 
 no_cache = 1
 

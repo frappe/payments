@@ -67,8 +67,11 @@ from urllib.parse import urlencode
 import frappe
 import razorpay
 from frappe import _
-from frappe.integrations.utils import (create_request_log, make_get_request,
-                                       make_post_request)
+from frappe.integrations.utils import (
+	create_request_log,
+	make_get_request,
+	make_post_request,
+)
 from frappe.model.document import Document
 from frappe.utils import call_hook_method, cint, get_timestamp, get_url
 

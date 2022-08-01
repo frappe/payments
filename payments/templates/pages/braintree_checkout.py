@@ -8,7 +8,9 @@ from frappe import _
 from frappe.utils import flt
 
 from payments.payment_gateways.doctype.braintree_settings.braintree_settings import (
-    get_client_token, get_gateway_controller)
+	get_client_token,
+	get_gateway_controller,
+)
 
 no_cache = 1
 
