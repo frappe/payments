@@ -65,7 +65,7 @@ def accept(web_form, data, docname=None, for_payment=False):
 	web_form = frappe.get_doc("Web Form", web_form)
 
 	if data.name and not web_form.allow_edit:
-		frappe.throw(_("You are not allowed to update this Web Form Document"))
+		frappe.throw(frappe._("You are not allowed to update this Web Form Document"))
 
 	frappe.flags.in_web_form = True
 	meta = frappe.get_meta(data.doctype)
@@ -109,7 +109,7 @@ def accept(web_form, data, docname=None, for_payment=False):
 	else:
 		# insert
 		if web_form.login_required and frappe.session.user == "Guest":
-			frappe.throw(_("You must login to submit this form"))
+			frappe.throw(frappe._("You must login to submit this form"))
 
 		ignore_mandatory = True if files else False
 
