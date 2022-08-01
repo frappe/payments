@@ -76,6 +76,7 @@ jobs:
           bench get-app payments $GITHUB_WORKSPACE
           bench setup requirements --dev
           bench new-site --db-root-password root --admin-password admin test_site
+          bench start &> bench_start.log &
           bench --site test_site install-app payments
           bench build
         env:
