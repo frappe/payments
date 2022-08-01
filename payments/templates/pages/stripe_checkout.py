@@ -53,14 +53,18 @@ def get_context(context):
 	else:
 		frappe.redirect_to_message(
 			_("Some information is missing"),
-			_("Looks like someone sent you to an incomplete URL. Please ask them to look into it."),
+			_(
+				"Looks like someone sent you to an incomplete URL. Please ask them to look into it."
+			),
 		)
 		frappe.local.flags.redirect_location = frappe.local.response.location
 		raise frappe.Redirect
 
 
 def get_api_key(doc, gateway_controller):
-	publishable_key = frappe.db.get_value("Stripe Settings", gateway_controller, "publishable_key")
+	publishable_key = frappe.db.get_value(
+		"Stripe Settings", gateway_controller, "publishable_key"
+	)
 	if cint(frappe.form_dict.get("use_sandbox")):
 		publishable_key = frappe.conf.sandbox_publishable_key
 

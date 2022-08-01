@@ -67,6 +67,7 @@ from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 import frappe
+import pytz
 from frappe import _
 from frappe.integrations.utils import create_request_log, make_post_request
 from frappe.model.document import Document
@@ -80,7 +81,9 @@ api_path = "/api/method/payments.payment_gateways.doctype.paypal_settings.paypal
 
 from payments.utils import create_payment_gateway
 
-api_path = "/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
+api_path = (
+	"/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
+)
 
 
 class PayPalSettings(Document):
@@ -181,7 +184,9 @@ class PayPalSettings(Document):
 		response = self.execute_set_express_checkout(**kwargs)
 
 		if self.paypal_sandbox or self.use_sandbox:
-			return_url = "https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token={0}"
+			return_url = (
+				"https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token={0}"
+			)
 		else:
 			return_url = "https://www.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token={0}"
 
@@ -345,7 +350,9 @@ def get_express_checkout_details(token):
 		)
 
 		frappe.local.response["type"] = "redirect"
-		frappe.local.response["location"] = get_redirect_uri(doc, token, response.get("PAYERID")[0])
+		frappe.local.response["location"] = get_redirect_uri(
+			doc, token, response.get("PAYERID")[0]
+		)
 
 	except Exception:
 		frappe.log_error(frappe.get_traceback())
@@ -411,7 +418,9 @@ def create_recurring_profile(token, payerid):
 		if data.get("subscription_id"):
 			if addons:
 				updating = True
-			manage_recurring_payment_profile_status(data["subscription_id"], "Cancel", params, url)
+			manage_recurring_payment_profile_status(
+				data["subscription_id"], "Cancel", params, url
+			)
 
 		params.update(
 			{
