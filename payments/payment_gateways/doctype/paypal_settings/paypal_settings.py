@@ -65,9 +65,8 @@ More Details:
 import json
 from urllib.parse import urlencode
 
-import pytz
-
 import frappe
+import pytz
 from frappe import _
 from frappe.integrations.utils import create_request_log, make_post_request
 from frappe.model.document import Document
@@ -75,7 +74,9 @@ from frappe.utils import call_hook_method, cint, get_datetime, get_url
 
 from payments.utils import create_payment_gateway
 
-api_path = "/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
+api_path = (
+	"/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
+)
 
 
 class PayPalSettings(Document):
@@ -176,7 +177,9 @@ class PayPalSettings(Document):
 		response = self.execute_set_express_checkout(**kwargs)
 
 		if self.paypal_sandbox or self.use_sandbox:
-			return_url = "https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token={0}"
+			return_url = (
+				"https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token={0}"
+			)
 		else:
 			return_url = "https://www.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token={0}"
 
@@ -212,7 +215,9 @@ class PayPalSettings(Document):
 		response = make_post_request(url, data=params.encode("utf-8"))
 
 		if response.get("ACK")[0] != "Success":
-			frappe.throw(_("Looks like something is wrong with this site's Paypal configuration."))
+			frappe.throw(
+				_("Looks like something is wrong with this site's Paypal configuration.")
+			)
 
 		return response
 
@@ -294,7 +299,9 @@ def get_express_checkout_details(token):
 		)
 
 		frappe.local.response["type"] = "redirect"
-		frappe.local.response["location"] = get_redirect_uri(doc, token, response.get("PAYERID")[0])
+		frappe.local.response["location"] = get_redirect_uri(
+			doc, token, response.get("PAYERID")[0]
+		)
 
 	except Exception:
 		frappe.log_error(frappe.get_traceback())
@@ -360,7 +367,9 @@ def create_recurring_profile(token, payerid):
 		if data.get("subscription_id"):
 			if addons:
 				updating = True
-			manage_recurring_payment_profile_status(data["subscription_id"], "Cancel", params, url)
+			manage_recurring_payment_profile_status(
+				data["subscription_id"], "Cancel", params, url
+			)
 
 		params.update(
 			{
@@ -382,10 +391,12 @@ def create_recurring_profile(token, payerid):
 			"Completed" if data.get("starting_immediately") or updating else "Verified"
 		)
 
-		starts_at = get_datetime(subscription_details.get("start_date")) or frappe.utils.now_datetime()
-		starts_at = starts_at.replace(tzinfo=pytz.timezone(frappe.utils.get_time_zone())).astimezone(
-			pytz.utc
+		starts_at = (
+			get_datetime(subscription_details.get("start_date")) or frappe.utils.now_datetime()
 		)
+		starts_at = starts_at.replace(
+			tzinfo=pytz.timezone(frappe.utils.get_time_zone())
+		).astimezone(pytz.utc)
 
 		# "PROFILESTARTDATE": datetime.utcfromtimestamp(get_timestamp(starts_at)).isoformat()
 		params.update({"PROFILESTARTDATE": starts_at.isoformat()})

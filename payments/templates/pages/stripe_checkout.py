@@ -6,7 +6,9 @@ import frappe
 from frappe import _
 from frappe.utils import cint, fmt_money
 
-from payments.payment_gateways.doctype.stripe_settings.stripe_settings import get_gateway_controller
+from payments.payment_gateways.doctype.stripe_settings.stripe_settings import (
+	get_gateway_controller,
+)
 
 no_cache = 1
 
@@ -31,7 +33,9 @@ def get_context(context):
 		for key in expected_keys:
 			context[key] = frappe.form_dict[key]
 
-		gateway_controller = get_gateway_controller(context.reference_doctype, context.reference_docname)
+		gateway_controller = get_gateway_controller(
+			context.reference_doctype, context.reference_docname
+		)
 		context.publishable_key = get_api_key(context.reference_docname, gateway_controller)
 		context.image = get_header_image(context.reference_docname, gateway_controller)
 
@@ -48,14 +52,18 @@ def get_context(context):
 	else:
 		frappe.redirect_to_message(
 			_("Some information is missing"),
-			_("Looks like someone sent you to an incomplete URL. Please ask them to look into it."),
+			_(
+				"Looks like someone sent you to an incomplete URL. Please ask them to look into it."
+			),
 		)
 		frappe.local.flags.redirect_location = frappe.local.response.location
 		raise frappe.Redirect
 
 
 def get_api_key(doc, gateway_controller):
-	publishable_key = frappe.db.get_value("Stripe Settings", gateway_controller, "publishable_key")
+	publishable_key = frappe.db.get_value(
+		"Stripe Settings", gateway_controller, "publishable_key"
+	)
 	if cint(frappe.form_dict.get("use_sandbox")):
 		publishable_key = frappe.conf.sandbox_publishable_key
 

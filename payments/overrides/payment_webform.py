@@ -25,12 +25,13 @@ class PaymentWebForm(WebForm):
 		if getattr(self, "accept_payment", False):
 			controller = get_payment_gateway_controller(self.payment_gateway)
 
-			title = "Payment for {0} {1}".format(doc.doctype, doc.name)
+			title = f"Payment for {doc.doctype} {doc.name}"
 			amount = self.amount
 			if self.amount_based_on_field:
 				amount = doc.get(self.amount_field)
 
 			from decimal import Decimal
+
 			if amount is None or Decimal(amount) <= 0:
 				return frappe.utils.get_url(self.success_url or self.route)
 
@@ -44,12 +45,11 @@ class PaymentWebForm(WebForm):
 				"payer_name": frappe.utils.get_fullname(frappe.session.user),
 				"order_id": doc.name,
 				"currency": self.currency,
-				"redirect_to": frappe.utils.get_url(self.success_url or self.route)
+				"redirect_to": frappe.utils.get_url(self.success_url or self.route),
 			}
 
 			# Redirect the user to this url
 			return controller.get_payment_url(**payment_details)
-
 
 
 @frappe.whitelist(allow_guest=True)
@@ -65,7 +65,7 @@ def accept(web_form, data, docname=None, for_payment=False):
 	web_form = frappe.get_doc("Web Form", web_form)
 
 	if data.name and not web_form.allow_edit:
-		frappe.throw(_("You are not allowed to update this Web Form Document"))
+		frappe.throw(frappe._("You are not allowed to update this Web Form Document"))
 
 	frappe.flags.in_web_form = True
 	meta = frappe.get_meta(data.doctype)
@@ -109,7 +109,7 @@ def accept(web_form, data, docname=None, for_payment=False):
 	else:
 		# insert
 		if web_form.login_required and frappe.session.user == "Guest":
-			frappe.throw(_("You must login to submit this form"))
+			frappe.throw(frappe._("You must login to submit this form"))
 
 		ignore_mandatory = True if files else False
 
