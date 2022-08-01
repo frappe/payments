@@ -25,12 +25,13 @@ class PaymentWebForm(WebForm):
 		if getattr(self, "accept_payment", False):
 			controller = get_payment_gateway_controller(self.payment_gateway)
 
-			title = "Payment for {0} {1}".format(doc.doctype, doc.name)
+			title = f"Payment for {doc.doctype} {doc.name}"
 			amount = self.amount
 			if self.amount_based_on_field:
 				amount = doc.get(self.amount_field)
 
 			from decimal import Decimal
+
 			if amount is None or Decimal(amount) <= 0:
 				return frappe.utils.get_url(self.success_url or self.route)
 
@@ -44,12 +45,11 @@ class PaymentWebForm(WebForm):
 				"payer_name": frappe.utils.get_fullname(frappe.session.user),
 				"order_id": doc.name,
 				"currency": self.currency,
-				"redirect_to": frappe.utils.get_url(self.success_url or self.route)
+				"redirect_to": frappe.utils.get_url(self.success_url or self.route),
 			}
 
 			# Redirect the user to this url
 			return controller.get_payment_url(**payment_details)
-
 
 
 @frappe.whitelist(allow_guest=True)

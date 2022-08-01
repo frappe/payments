@@ -6,9 +6,7 @@ import frappe
 from frappe import _
 
 from payments.payment_gateways.doctype.paytm_settings.paytm_settings import (
-	get_paytm_config,
-	get_paytm_params,
-)
+    get_paytm_config, get_paytm_params)
 
 
 def get_context(context):
@@ -18,7 +16,9 @@ def get_context(context):
 	try:
 		doc = frappe.get_doc("Integration Request", frappe.form_dict["order_id"])
 
-		context.payment_details = get_paytm_params(json.loads(doc.data), doc.name, paytm_config)
+		context.payment_details = get_paytm_params(
+			json.loads(doc.data), doc.name, paytm_config
+		)
 
 		context.url = paytm_config.url
 
