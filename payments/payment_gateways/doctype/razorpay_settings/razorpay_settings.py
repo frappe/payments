@@ -274,7 +274,7 @@ class RazorpaySettings(Document):
 				self.integration_request.update_status(data, "Authorized")
 				self.flags.status_changed_to = "Authorized"
 
-			if resp.get("status") == "captured":
+			elif resp.get("status") == "captured":
 				self.integration_request.update_status(data, "Completed")
 				self.flags.status_changed_to = "Completed"
 
