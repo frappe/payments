@@ -3,6 +3,7 @@ import json
 import frappe
 from frappe.core.doctype.file import remove_file_by_url
 from frappe.rate_limiter import rate_limit
+from frappe.utils import cint
 from frappe.website.doctype.web_form.web_form import WebForm
 
 from payments.utils import get_payment_gateway_controller
@@ -18,7 +19,7 @@ class PaymentWebForm(WebForm):
 	def validate_payment_amount(self):
 		if self.amount_based_on_field and not self.amount_field:
 			frappe.throw(frappe._("Please select a Amount Field."))
-		elif not self.amount_based_on_field and not self.amount > 0:
+		elif not self.amount_based_on_field and not cint(self.amount) > 0:
 			frappe.throw(frappe._("Amount must be greater than 0."))
 
 	def get_payment_gateway_url(self, doc):
