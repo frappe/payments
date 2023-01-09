@@ -60,12 +60,14 @@ def accept(web_form, data, docname=None, for_payment=False):
 	data = frappe._dict(json.loads(data))
 	for_payment = frappe.parse_json(for_payment)
 
+	docname = docname or data.name
+
 	files = []
 	files_to_delete = []
 
 	web_form = frappe.get_doc("Web Form", web_form)
 
-	if data.name and not web_form.allow_edit:
+	if docname and not web_form.allow_edit:
 		frappe.throw(frappe._("You are not allowed to update this Web Form Document"))
 
 	frappe.flags.in_web_form = True
