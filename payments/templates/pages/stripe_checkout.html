@@ -12,47 +12,23 @@
 
 {%- block page_content -%}
 
-<div class="stripe" style="min-height: 400px; padding-bottom: 50px; margin-top:100px;margin-left:250px;">
-	<div class="col-sm-10 col-sm-offset-2">
-		{% if image %}
-			<img src={{image}}>
-		{% endif %}
-		<h2 class="text-center">{{description}}</h2>
-		<form id="payment-form">
-			<div class="form-row row">
-				<div class="group col-12">
-					<div>
-						<label>
-							<span>{{ _("Name") }}</span>
-						<input id="cardholder-name" name="cardholder-name" class="field" placeholder="{{ _('John Doe') }}" value="{{payer_name}}"/>
-					</label>
-					</div>
-				</div>
-				<div class="group col-12">
-					<div>
-						<label>
-							<span>{{ _("Email") }}</span>
-						<input id="cardholder-email" name="cardholder-email" class="field" placeholder="{{ _('john@doe.com') }}" value="{{payer_email}}"/>
-					</label>
-					</div>
-				</div>
-				<div class="group col-12">
-					<label>
-					<span>{{ _("Card Details") }}</span>
-				<div id="card-element" name="card-element" class="field"></div>
-				<div id="card-errors" role="alert"></div>
-			</label>
-			</div>
-
-			</div>
-			<button type="submit" class="submit" id="submit">{{_('Pay')}} {{amount}}</button>
-			<div class="outcome text-center">
-				<div class="error" hidden>{{ _("An error occured during the payment process. Please contact us.") }}</div>
-				<div class="success" hidden>{{ _("Your payment has been successfully registered.") }}</div>
-			</div>
-		</form>
-	</div>
+<div class="stripe">
+    <!-- Display a payment form -->
+    <form id="payment-form">
+      <div id="link-authentication-element">
+        <!--Stripe.js injects the Link Authentication Element-->
+      </div>
+      <div id="payment-element">
+        <!--Stripe.js injects the Payment Element-->
+      </div>
+      <button id="submit">
+        <div class="spinner hidden" id="spinner"></div>
+        <span id="button-text">Pay now</span>
+      </button>
+      <div id="payment-message" class="hidden"></div>
+    </form>
 </div>
 
 
 {% endblock %}
+
