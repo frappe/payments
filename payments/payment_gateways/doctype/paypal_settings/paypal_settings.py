@@ -71,6 +71,7 @@ from frappe import _
 from frappe.integrations.utils import create_request_log, make_post_request
 from frappe.model.document import Document
 from frappe.utils import call_hook_method, cint, get_datetime, get_url
+from frappe.utils.data import get_system_timezone
 
 from payments.utils import create_payment_gateway
 
@@ -395,7 +396,7 @@ def create_recurring_profile(token, payerid):
 			get_datetime(subscription_details.get("start_date")) or frappe.utils.now_datetime()
 		)
 		starts_at = starts_at.replace(
-			tzinfo=pytz.timezone(frappe.utils.get_time_zone())
+			tzinfo=pytz.timezone(get_system_timezone())
 		).astimezone(pytz.utc)
 
 		# "PROFILESTARTDATE": datetime.utcfromtimestamp(get_timestamp(starts_at)).isoformat()
