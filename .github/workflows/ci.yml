@@ -91,3 +91,7 @@ jobs:
           bench --site test_site run-tests --app payments
         env:
           TYPE: server
+
+      - name: Show bench output
+        if: ${{ always() }}
+        run: cat ~/frappe-bench/bench_start.log || true
