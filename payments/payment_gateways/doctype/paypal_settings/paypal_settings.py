@@ -380,9 +380,7 @@ def create_recurring_profile(token, payerid):
 				"DESC": data.get("description"),
 				"BILLINGPERIOD": subscription_details.get("billing_period"),
 				"BILLINGFREQUENCY": subscription_details.get("billing_frequency"),
-				"AMT": data.get("amount")
-				if data.get("subscription_amount") == data.get("amount")
-				else data.get("subscription_amount"),
+				"AMT": data.get("subscription_amount"),
 				"CURRENCYCODE": data.get("currency").upper(),
 				"INITAMT": data.get("upfront_amount"),
 			}
@@ -395,9 +393,9 @@ def create_recurring_profile(token, payerid):
 		starts_at = (
 			get_datetime(subscription_details.get("start_date")) or frappe.utils.now_datetime()
 		)
-		starts_at = starts_at.replace(
-			tzinfo=pytz.timezone(get_system_timezone())
-		).astimezone(pytz.utc)
+		starts_at = starts_at.replace(tzinfo=pytz.timezone(get_system_timezone())).astimezone(
+			pytz.utc
+		)
 
 		# "PROFILESTARTDATE": datetime.utcfromtimestamp(get_timestamp(starts_at)).isoformat()
 		params.update({"PROFILESTARTDATE": starts_at.isoformat()})
@@ -444,7 +442,7 @@ def update_integration_request_status(token, data, status, error=False, doc=None
 def get_redirect_uri(doc, token, payerid):
 	data = json.loads(doc.data)
 
-	if data.get("subscription_details") or data.get("subscription_id"):
+	if data.get("subscription_details"):
 		return get_url(f"{api_path}.create_recurring_profile?token={token}&payerid={payerid}")
 	else:
 		return get_url(f"{api_path}.confirm_payment?token={token}")
