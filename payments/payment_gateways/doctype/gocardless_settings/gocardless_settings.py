@@ -99,7 +99,7 @@ class GoCardlessSettings(Document):
 			)
 
 	def get_payment_url(self, **kwargs):
-		return get_url("gocardless_checkout?{0}".format(urlencode(kwargs)))
+		return get_url(f"gocardless_checkout?{urlencode(kwargs)}")
 
 	def create_payment_request(self, data):
 		self.data = frappe._dict(data)
