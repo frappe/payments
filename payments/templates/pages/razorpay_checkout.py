@@ -59,9 +59,7 @@ def get_api_key():
 
 
 @frappe.whitelist(allow_guest=True)
-def make_payment(
-	razorpay_payment_id, options, reference_doctype, reference_docname, token
-):
+def make_payment(razorpay_payment_id, options, reference_doctype, reference_docname, token):
 	data = {}
 
 	if isinstance(options, str):

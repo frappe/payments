@@ -75,9 +75,7 @@ from frappe.utils.data import get_system_timezone
 
 from payments.utils import create_payment_gateway
 
-api_path = (
-	"/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
-)
+api_path = "/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
 
 
 class PayPalSettings(Document):
@@ -178,9 +176,7 @@ class PayPalSettings(Document):
 		response = self.execute_set_express_checkout(**kwargs)
 
 		if self.paypal_sandbox or self.use_sandbox:
-			return_url = (
-				"https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token={0}"
-			)
+			return_url = "https://www.sandbox.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token={0}"
 		else:
 			return_url = "https://www.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token={0}"
 
@@ -216,9 +212,7 @@ class PayPalSettings(Document):
 		response = make_post_request(url, data=params.encode("utf-8"))
 
 		if response.get("ACK")[0] != "Success":
-			frappe.throw(
-				_("Looks like something is wrong with this site's Paypal configuration.")
-			)
+			frappe.throw(_("Looks like something is wrong with this site's Paypal configuration."))
 
 		return response
 
@@ -300,9 +294,7 @@ def get_express_checkout_details(token):
 		)
 
 		frappe.local.response["type"] = "redirect"
-		frappe.local.response["location"] = get_redirect_uri(
-			doc, token, response.get("PAYERID")[0]
-		)
+		frappe.local.response["location"] = get_redirect_uri(doc, token, response.get("PAYERID")[0])
 
 	except Exception:
 		frappe.log_error(frappe.get_traceback())
@@ -368,9 +360,7 @@ def create_recurring_profile(token, payerid):
 		if data.get("subscription_id"):
 			if addons:
 				updating = True
-			manage_recurring_payment_profile_status(
-				data["subscription_id"], "Cancel", params, url
-			)
+			manage_recurring_payment_profile_status(data["subscription_id"], "Cancel", params, url)
 
 		params.update(
 			{
@@ -386,16 +376,10 @@ def create_recurring_profile(token, payerid):
 			}
 		)
 
-		status_changed_to = (
-			"Completed" if data.get("starting_immediately") or updating else "Verified"
-		)
+		status_changed_to = "Completed" if data.get("starting_immediately") or updating else "Verified"
 
-		starts_at = (
-			get_datetime(subscription_details.get("start_date")) or frappe.utils.now_datetime()
-		)
-		starts_at = starts_at.replace(tzinfo=pytz.timezone(get_system_timezone())).astimezone(
-			pytz.utc
-		)
+		starts_at = get_datetime(subscription_details.get("start_date")) or frappe.utils.now_datetime()
+		starts_at = starts_at.replace(tzinfo=pytz.timezone(get_system_timezone())).astimezone(pytz.utc)
 
 		# "PROFILESTARTDATE": datetime.utcfromtimestamp(get_timestamp(starts_at)).isoformat()
 		params.update({"PROFILESTARTDATE": starts_at.isoformat()})
@@ -463,9 +447,7 @@ def manage_recurring_payment_profile_status(profile_id, action, args, url):
 	# thus could not cancel the subscription.
 	# thus raise an exception only if the error code is not equal to 11556
 
-	if (
-		response.get("ACK")[0] != "Success" and response.get("L_ERRORCODE0", [])[0] != "11556"
-	):
+	if response.get("ACK")[0] != "Success" and response.get("L_ERRORCODE0", [])[0] != "11556":
 		frappe.throw(_("Failed while amending subscription"))
 
 
