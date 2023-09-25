@@ -94,9 +94,7 @@ before_uninstall = "payments.utils.delete_custom_fields"
 # ---------------
 # Override standard doctype classes
 
-override_doctype_class = {
-	"Web Form": "payments.overrides.payment_webform.PaymentWebForm"
-}
+override_doctype_class = {"Web Form": "payments.overrides.payment_webform.PaymentWebForm"}
 
 # Document Events
 # ---------------
