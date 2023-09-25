@@ -262,9 +262,7 @@ class RazorpaySettings(Document):
 		        "quantity": 1 (The total amount is calculated as item.amount * quantity)
 		}
 		"""
-		url = "https://api.razorpay.com/v1/subscriptions/{}/addons".format(
-			kwargs.get("subscription_id")
-		)
+		url = "https://api.razorpay.com/v1/subscriptions/{}/addons".format(kwargs.get("subscription_id"))
 
 		try:
 			if not frappe.conf.converted_rupee_to_paisa:
@@ -278,9 +276,7 @@ class RazorpaySettings(Document):
 					headers={"content-type": "application/json"},
 				)
 				if not resp.get("id"):
-					frappe.log_error(
-						message=str(resp), title="Razorpay Failed while creating subscription"
-					)
+					frappe.log_error(message=str(resp), title="Razorpay Failed while creating subscription")
 		except Exception:
 			frappe.log_error()
 			# failed
@@ -319,9 +315,7 @@ class RazorpaySettings(Document):
 				frappe.flags.status = "created"
 				return kwargs
 			else:
-				frappe.log_error(
-					message=str(resp), title="Razorpay Failed while creating subscription"
-				)
+				frappe.log_error(message=str(resp), title="Razorpay Failed while creating subscription")
 
 		except Exception:
 			frappe.log_error()
@@ -696,9 +690,7 @@ def capture_payment(is_sandbox=False, sanbox_response=None):
 
 				if resp.get("status") == "authorized":
 					resp = make_post_request(
-						"https://api.razorpay.com/v1/payments/{}/capture".format(
-							data.get("razorpay_payment_id")
-						),
+						"https://api.razorpay.com/v1/payments/{}/capture".format(data.get("razorpay_payment_id")),
 						auth=(settings.api_key, settings.api_secret),
 						data={"amount": data.get("amount")},
 					)
@@ -739,9 +731,7 @@ def get_order(doctype, docname):
 		# Do not use run_method here as it fails silently
 		return doc.get_razorpay_order()
 	except AttributeError:
-		frappe.log_error(
-			frappe.get_traceback(), _("Controller method get_razorpay_order missing")
-		)
+		frappe.log_error(frappe.get_traceback(), _("Controller method get_razorpay_order missing"))
 		frappe.throw(_("Could not create Razorpay order. Please contact Administrator"))
 
 
