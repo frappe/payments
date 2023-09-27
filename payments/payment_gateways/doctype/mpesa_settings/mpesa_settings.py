@@ -14,6 +14,7 @@ from payments.payment_gateways.doctype.mpesa_settings.mpesa_connector import Mpe
 from payments.payment_gateways.doctype.mpesa_settings.mpesa_custom_fields import (
 	create_custom_pos_fields,
 )
+from payments.utils import erpnext_app_import_guard
 
 
 class MpesaSettings(Document):
@@ -354,7 +355,8 @@ def fetch_param_value(response, key, key_field):
 
 
 def create_mode_of_payment(gateway, payment_type="General"):
-	from erpnext import get_default_company
+	with erpnext_app_import_guard():
+		from erpnext import get_default_company
 
 	payment_gateway_account = frappe.db.get_value(
 		"Payment Gateway Account", {"payment_gateway": gateway}, ["payment_account"]

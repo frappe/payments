@@ -1,6 +1,7 @@
 import click
 import frappe
 from frappe import _
+from contextlib import contextmanager
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 
@@ -188,3 +189,16 @@ def before_install():
 	# a lot of apis don;t exist in v10 and this is a (at the moment) required app for erpnext.
 	if not frappe.get_meta("Module Def").has_field("custom"):
 		return False
+
+
+@contextmanager
+def erpnext_app_import_guard():
+	marketplace_link = '<a href="https://frappecloud.com/marketplace/apps/erpnext">Marketplace</a>'
+	github_link = '<a href="https://github.com/frappe/erpnext">GitHub</a>'
+	msg = _("erpnext app is not installed. Please install it from {} or {}").format(
+		marketplace_link, github_link
+	)
+	try:
+		yield
+	except ImportError:
+		frappe.throw(msg, title=_("Missing ERPNext App"))
