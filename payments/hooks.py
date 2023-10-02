@@ -94,7 +94,7 @@ before_install = "payments.utils.before_install"
 # ---------------
 # Override standard doctype classes
 
-override_doctype_class = {"Web Form": "payments.overrides.payment_webform.PaymentWebForm"} 
+override_doctype_class = {"Web Form": "payments.overrides.payment_webform.PaymentWebForm"}
 
 # Document Events
 # ---------------
