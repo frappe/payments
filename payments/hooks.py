@@ -29,7 +29,7 @@ app_license = "MIT"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {"Web Form" : "public/js/web_form.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -64,12 +64,12 @@ app_license = "MIT"
 # ------------
 
 before_install = "payments.utils.before_install"
-after_install = "payments.utils.make_custom_fields"
+# after_install = "payments.utils.make_custom_fields"
 
 # Uninstallation
 # ------------
 
-before_uninstall = "payments.utils.delete_custom_fields"
+# before_uninstall = "payments.utils.delete_custom_fields"
 # after_uninstall = "pay.uninstall.after_uninstall"
 
 # Desk Notifications
@@ -94,7 +94,7 @@ before_uninstall = "payments.utils.delete_custom_fields"
 # ---------------
 # Override standard doctype classes
 
-override_doctype_class = {"Web Form": "payments.overrides.payment_webform.PaymentWebForm"}
+override_doctype_class = {"Web Form": "payments.overrides.payment_webform.PaymentWebForm"} 
 
 # Document Events
 # ---------------
