@@ -1,0 +1,98 @@
+{% extends "templates/web.html" %}
+
+{% block title %} Payment {% endblock %}
+
+{%- block header -%}{% endblock %}
+
+{% block script %}
+<script>{% include "templates/includes/braintree_checkout.js" %}</script>
+{% endblock %}
+
+{%- block page_content -%}
+<!-- Start your project here-->
+
+<style>
+  .btn-group-vertical>.btn:not(:first-child),
+  .btn-group-vertical>.btn-group:not(:first-child) {
+    margin-top: 0;
+  }
+</style>
+<section>
+  <div class="d-flex justify-content-between align-items-center mb-5">
+    <div class="d-flex flex-row align-items-center">
+      <h4 class="text-uppercase mt-1">Eco</h4>
+      <span class="ms-2 me-3">Tracker</span>
+    </div>
+    <button type="button" id="cancel" class="btn btn-danger">Cancel and Exit</button>   
+    </div>
+
+  <div class="row">
+
+    <div class="col-md-7 col-lg-7 col-xl-6 mb-4 mb-md-0">
+      <h5 class="mb-3">List of Items</h5>
+      <br>
+
+      
+      <div>
+
+
+        {% for item in items %}
+        <div class="d-flex justify-content-between">
+          <div class="d-flex flex-row mt-1">
+            <h6>{{item.item_code}}</h6>
+          </div>
+          <div class="d-flex flex-row align-items-center text-primary">
+            <span class="ms-1">{{currency}} {{ item.amount }}</span>
+          </div>
+        </div>
+        <p>
+          {{ item.description}}
+        </p>
+        <div
+          class="p-2 d-flex justify-content-between align-items-center"
+          style="background-color: #eee;"
+        >
+          <span>Quantity</span>
+          <span>{{item.stock_qty}}</span>
+        </div>
+        <hr />
+
+        {% endfor %}
+
+
+
+        <button type="button" class="btn btn-primary btn-lg btn-block">Proceed to payment</button>
+      </div>
+    </div>
+    <div class="col-md-5 col-lg-4 col-xl-4 offset-lg-1 offset-xl-2">
+      <div class="p-3" style="background-color: #eee;">
+        <span class="fw-bold">Order Recap</span>
+        <div class="d-flex justify-content-between mt-2">
+          <span>Total Cost</span> <span>{{amount}}</span>
+        </div>
+    
+  
+        <hr />
+        <div class="d-flex justify-content-between mt-2">
+          <span class="lh-sm"
+            >Balance <br />
+            in Wallet
+          </span>
+          <span>{{balance}}</span>
+        </div>
+        <hr />
+        <hr />
+        <div class="d-flex justify-content-between mt-2">
+          <span>Balance after Purchase </span> <span class="text-success">{{pred_price}}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- End your project here-->
+
+<!-- MDB -->
+<script type="text/javascript" src="js/mdb.min.js"></script>
+<!-- Custom scripts -->
+<script type="text/javascript"></script>
+{% endblock %}

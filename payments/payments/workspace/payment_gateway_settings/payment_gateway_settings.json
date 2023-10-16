@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"KolILUyZmE\",\"type\":\"header\",\"data\":{\"text\":\"Payment Gateway Settings<br>\",\"col\":12}},{\"id\":\"hVBlMgWJJl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Razorpay Credentials\",\"col\":3}},{\"id\":\"h0jWi4WPtw\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New PayPal Credentials\",\"col\":3}},{\"id\":\"lWK7qctJxv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Braintree Credentials\",\"col\":3}},{\"id\":\"PNR2Hu9VTz\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Paytm Credentials\",\"col\":3}},{\"id\":\"DjUhxfnxCP\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Stripe Credentials\",\"col\":3}},{\"id\":\"SvSN3yVfZ7\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"Uv8BZMTFlY\",\"type\":\"card\",\"data\":{\"card_name\":\"Gateway Settings\",\"col\":4}},{\"id\":\"RYb-e772N9\",\"type\":\"card\",\"data\":{\"card_name\":\"Payment Gateway\",\"col\":4}}]",
+ "content": "[{\"id\":\"KolILUyZmE\",\"type\":\"header\",\"data\":{\"text\":\"Payment Gateway Settings<br>\",\"col\":12}},{\"id\":\"hVBlMgWJJl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Razorpay Credentials\",\"col\":3}},{\"id\":\"h0jWi4WPtw\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New PayPal Credentials\",\"col\":3}},{\"id\":\"lWK7qctJxv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Braintree Credentials\",\"col\":3}},{\"id\":\"PNR2Hu9VTz\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Paytm Credentials\",\"col\":3}},{\"id\":\"DjUhxfnxCP\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Stripe Credentials\",\"col\":3}},{\"id\":\"LiCnEOy2JX\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Custom Payment Settings\",\"col\":3}},{\"id\":\"SvSN3yVfZ7\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"Uv8BZMTFlY\",\"type\":\"card\",\"data\":{\"card_name\":\"Gateway Settings\",\"col\":4}},{\"id\":\"RYb-e772N9\",\"type\":\"card\",\"data\":{\"card_name\":\"Payment Gateway\",\"col\":4}}]",
  "creation": "2023-10-04 08:32:58.766533",
  "custom_blocks": [],
  "docstatus": 0,
@@ -15,8 +15,26 @@
   {
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Payment Gateway",
+   "link_count": 1,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Gateway",
+   "link_count": 0,
+   "link_to": "Payment Gateway",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Gateway Settings",
-   "link_count": 5,
+   "link_count": 6,
    "onboard": 0,
    "type": "Card Break"
   },
@@ -73,24 +91,16 @@
   {
    "hidden": 0,
    "is_query_report": 0,
-   "label": "Payment Gateway",
-   "link_count": 1,
-   "onboard": 0,
-   "type": "Card Break"
-  },
-  {
-   "hidden": 0,
-   "is_query_report": 0,
-   "label": "Payment Gateway",
+   "label": "Custom Payment Settings",
    "link_count": 0,
-   "link_to": "Payment Gateway",
+   "link_to": "Custom Payment Settings",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
   }
  ],
- "modified": "2023-10-04 08:45:41.766828",
- "modified_by": "kelvinzawala@gmail.com",
+ "modified": "2023-10-16 11:42:50.969813",
+ "modified_by": "Administrator",
  "module": "Payments",
  "name": "Payment Gateway Settings",
  "number_cards": [],
@@ -99,8 +109,15 @@
  "public": 1,
  "quick_lists": [],
  "roles": [],
- "sequence_id": 23.0,
+ "sequence_id": 17.0,
  "shortcuts": [
+  {
+   "color": "Grey",
+   "doc_view": "New",
+   "label": "New Custom Payment Settings",
+   "link_to": "Custom Payment Settings",
+   "type": "DocType"
+  },
   {
    "color": "Grey",
    "doc_view": "List",
