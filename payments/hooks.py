@@ -94,9 +94,7 @@ before_uninstall = "payments.utils.delete_custom_fields"
 # ---------------
 # Override standard doctype classes
 
-override_doctype_class = {
-	"Web Form": "payments.overrides.payment_webform.PaymentWebForm"
-}
+override_doctype_class = {"Web Form": "payments.overrides.payment_webform.PaymentWebForm"}
 
 # Document Events
 # ---------------
@@ -122,7 +120,7 @@ scheduler_events = {
 # Testing
 # -------
 
-# before_tests = "pay.install.before_tests"
+before_tests = "erpnext.setup.utils.before_tests"  # To setup company and accounts
 
 # Overriding Methods
 # ------------------------------
