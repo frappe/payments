@@ -3,10 +3,10 @@
 {% block title %} Payment {% endblock %}
 
 {%- block header -%}{% endblock %}
-
 {% block script %}
-<script>{% include "templates/includes/braintree_checkout.js" %}</script>
+<script>{% include "templates/includes/wallet.js" %}</script>
 {% endblock %}
+
 
 {%- block page_content -%}
 <!-- Start your project here-->
@@ -61,7 +61,7 @@
 
 
 
-        <button type="button" class="btn btn-primary btn-lg btn-block">Proceed to payment</button>
+        <button type="button" id="proceed" class="btn btn-primary btn-lg btn-block">Proceed to payment</button>
       </div>
     </div>
     <div class="col-md-5 col-lg-4 col-xl-4 offset-lg-1 offset-xl-2">
@@ -83,7 +83,7 @@
         <hr />
         <hr />
         <div class="d-flex justify-content-between mt-2">
-          <span>Balance after Purchase </span> <span class="text-success">{{pred_price}}</span>
+          <span>Balance after Purchase </span> <span class="text-success">{{pred_balance}}</span>
         </div>
       </div>
     </div>
@@ -92,7 +92,5 @@
 <!-- End your project here-->
 
 <!-- MDB -->
-<script type="text/javascript" src="js/mdb.min.js"></script>
 <!-- Custom scripts -->
-<script type="text/javascript"></script>
 {% endblock %}

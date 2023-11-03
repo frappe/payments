@@ -1,0 +1,22 @@
+syntax = "proto3";
+package databank;
+
+service wallet {
+  rpc debit (user) returns (reply) {}
+  rpc credit (user) returns (reply) {}
+  rpc balance (user) returns (reply){}
+  rpc add_user (user) returns (reply){}
+  rpc remove_user (user) returns (reply){}
+}
+
+message user{
+    string username=1;
+    float voip=2;
+    float monetary=3;
+}
+
+message reply{
+    float voip=1;
+    float monetary=2;
+    string info=3;
+}

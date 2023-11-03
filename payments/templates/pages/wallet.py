@@ -3,9 +3,9 @@ import json
 import frappe
 from frappe import _
 from frappe.utils import flt
-
-from payments.payment_gateways.doctype.braintree_settings.braintree_settings import (
-	get_client_token,
+import grpc
+from payments.payment_gateways.doctype.custom_payment_settings.databank import wallet_pb2, wallet_pb2_grpc
+from payments.payment_gateways.doctype.custom_payment_settings.custom_payment_settings import (
 	get_gateway_controller,
 )
 
@@ -31,8 +31,9 @@ def get_context(context):
 		for key in expected_keys:
 			context[key] = frappe.form_dict[key]
 
-
 		context["amount"] = flt(context["amount"])
+		context['balance']=get_balance(context["reference_docname"])
+		context['pred_balance']= context["balance"]-context['amount']
 
 		gateway_controller = get_gateway_controller(context.reference_docname)
 		context["header_img"] = frappe.db.get_value(
@@ -51,14 +52,49 @@ def get_order_items(reqname):
 	order=frappe.get_doc('Sales Order',(frappe.get_value('Payment Request',reqname,['reference_name'])), as_dict=1)
 	return order.items
 	
-    
+def get_balance():
+	pass
+
+
 @frappe.whitelist(allow_guest=True)
-def make_payment(payload_nonce, data, reference_doctype, reference_docname):
+def cancel_payment(data):
+	try:
+		data = json.loads(data)
+		print(data['order_id'])
+		payment=frappe.get_doc('Payment Request', data['order_id'])
+		payment.cancel()
+		return 'Success'
+	except Exception:
+		frappe.throw('Payment Already Cancelled')
+
+@frappe.whitelist(allow_guest=True)
+def make_payment(data, reference_doctype, reference_docname):
 	data = json.loads(data)
-
-	data.update({"payload_nonce": payload_nonce})
-
 	gateway_controller = get_gateway_controller(reference_docname)
-	data = frappe.get_doc("Custom Payment Settings", gateway_controller).create_payment_request(data)
+	reply = frappe.get_doc("Custom Payment Settings", gateway_controller).create_payment_request(data)
 	frappe.db.commit()
+	if reply.info=='Transaction successful':
+		data={'info':reply.info,'balance':reply.monetary}
+
+	else:
+		data={'info':reply.info}
 	return data
+
+def get_balance(reference_docname):
+	print(reference_docname)
+	try:
+		gateway_controller = get_gateway_controller(reference_docname)
+		channel=frappe.get_doc("Custom Payment Settings", gateway_controller).configure_wallet()
+		details= wallet_pb2.user(username='kelvin zawala')
+		stub = wallet_pb2_grpc.walletStub(channel)
+		response = stub.balance(details)
+		print(response)
+		return response.monetary
+	except grpc.RpcError as e:
+		frappe.redirect_to_message(
+			_("An Error occurred"),
+			_(f"{e.code()}"),
+		)
+		frappe.local.flags.redirect_location = frappe.local.response.location
+		raise frappe.Redirect
+			

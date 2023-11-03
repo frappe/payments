@@ -1,0 +1,1 @@
+from . import wallet_pb2, wallet_pb2_grpc
