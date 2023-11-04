@@ -43,8 +43,8 @@ function init_payment(){
             "reference_docname": docname
         },
         callback: function(r) {
-           frappe.msgprint(r.message.info)
            if (r.message.info=="Transaction successful"){
+            load_success()
 
            }else {
             frappe.msgprint(r.message.info)
@@ -79,6 +79,27 @@ function cancel_payment(){
 }
 
 function load_success(){
+    success=`<div class="modal-dialog modal-confirm">
+    <div class="modal-content">
+        <div class="modal-header">
+            <div class="icon-box">
+                <i class="material-icons"></i>
+            </div>				
+            <h4 class="modal-title w-100">Awesome!</h4>	
+        </div>
+        <div class="modal-body">
+            <p class="text-center">Your New balance is {{pred_balance}}</p></br>
+            <div class="py-4 d-flex justify-content-center">
+            <h6><a href="/all-products">Return to website</a></h6>
+          </div>
+        </div>
+        <div class="modal-footer">
+       
+        </div>
+    </div>
+    </div>`;
+    $('#main_section').empty();
+    $( "#main_section" ).append(success);
 
 }
 
