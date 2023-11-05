@@ -13,21 +13,21 @@ A payments app for frappe.
     ```
     $ bench --site <sitename> install-app payments
     ```
+    
+## Supported Payment Gateways
 
-## App Structure & Details
-App has 2 modules - Payments and Payment Gateways.
+- Razorpay
+- Stripe
+- Braintree
+- Paypal
+- PayTM
+- Mpesa
+- GoCardless
 
-Payment Module contains the Payment Gateway DocType which creates links for the payment gateways and Payment Gateways Module contain all the Payment Gateway (Razorpay, Stripe, Braintree, Paypal, PayTM) DocTypes.
+## Architecture
 
-App adds custom fields to Web Form for facilitating payments upon installation and removes them upon uninstallation.
+see [Architecture Document](./ARCHITECTURE.md)
 
-All general utils are stored in [utils](payments/utils) directory. The utils are written in [utils.py](payments/utils/utils.py) and then imported into the [`__init__.py`](payments/utils/__init__.py) file for easier importing/namespacing.
-
-[overrides](payments/overrides) directory has all the overrides for overriding standard frappe code. Currently it overrides WebForm DocType controller as well as a WebForm whitelisted method.
-
-[templates](payments/templates) directory has all the payment gateways' custom checkout pages.
-
-#
 
 ## License
 MIT ([license.txt](license.txt))
