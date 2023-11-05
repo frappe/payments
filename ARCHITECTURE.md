@@ -65,6 +65,67 @@ Therefore, the flow needs to decide which route to take, and looks like this:
 
 [![Schematic Overview](./overview.svg "Schematic Overview")](https://excalidraw.com/#json=O5_Mnthd9TgTQVnwaIT9J,iegjpeWt7u-kqxz-6JqUjg)
 
+### Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    participant RefDoc
+    participant PaymentController
+    actor Payer
+    actor Gateway
+    autonumber
+    rect rgb(191, 223, 255)
+    opt Validation
+    RefDoc->>PaymentController: on_refdoc_submit(txdata)
+    end
+    end
+    rect rgb(200, 150, 255)
+    RefDoc->>+PaymentController: initiate_payment(txdata)
+    Note over RefDoc, Gateway: Payer is instructed to proceed by either refdoc, pre-existing flow, gateway or a third party action
+    Payer ->> PaymentController: proceed(txref, updated_txdata)
+    Note over PaymentController: Status - "Queued"
+    PaymentController->>+Gateway: initiate_*(txdata, [mandate])
+    alt IPN
+        Gateway->>-PaymentController: process_reponse_for_*(txref, payload)
+    else ClientFlow
+        Gateway-->>Payer: 
+        Payer->>PaymentController: process_reponse_for_*(txref, payload)
+    end
+    end
+    rect rgb(70, 200, 255)
+    opt on first process
+    PaymentController -->> PaymentController: _validate_payload()
+    PaymentController -->> PaymentController: _process_response_for_*()
+    Note over PaymentController: Status - "Authorized|Completed|Failed"
+    PaymentController->>RefDoc: on_payment_*_processed(flags, state)
+    RefDoc-->>PaymentController: return_value
+    PaymentController -->> PaymentController: persist return_value
+    end
+    PaymentController -->- Payer: return_value for render
+    end
+```
+
+1. Validate
+2. Initiate Payment: creates _Integration Request_
+3. Payer gives GO signal through appropriate means (e.g. URL, IVR interaction, pos terminal)
+4. Controller initiates the payment with the gateway
+5. Flow yields a response payload to the controller: server-to-server variant
+6. ditto: variant via client flow
+7. ditto: variant via client flow
+8. Validate payload integrity
+9. Process the response and set the status
+10. Hand over to business logic; passing read-only views of `self.flags` and `self.state`
+11. Receive return value from business logic (e.g. success message / next action)
+12. Persist return value (may come from controller processing, ref doc or be a generic default)
+13. Forward return value to the client for processing (e.g. render / execute action / etc)
+
+A server-to-server response from the gateway and a signed payload via the client flow may occur in parallel.
+
+Thus the blue area is only executed once (via a lock) and if it was already executed, the return value is simply read back.
+
+This accomodates the case that the server-to-server response comes in first, yet the client flow can still process its useful return value:
+it joins (as in: "thread join") the client flow on the correct return value.
+
 ### And my Payment URL?
 
 The payment URL is simply a well-known concatenation as follows and is one of the alternatives with which the user gives the GO signal to the Payment Gateway controller flow.
