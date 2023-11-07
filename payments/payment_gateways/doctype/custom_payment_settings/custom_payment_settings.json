@@ -10,6 +10,7 @@
   "gateway_name",
   "section_break_2",
   "url",
+  "domain_url",
   "type",
   "header_img"
  ],
@@ -42,10 +43,15 @@
    "fieldname": "header_img",
    "fieldtype": "Attach Image",
    "label": "Header Image"
+  },
+  {
+   "fieldname": "domain_url",
+   "fieldtype": "Data",
+   "label": "Domain Url"
   }
  ],
  "links": [],
- "modified": "2023-10-13 08:28:18.801694",
+ "modified": "2023-11-07 16:14:24.861192",
  "modified_by": "Administrator",
  "module": "Payment Gateways",
  "name": "Custom Payment Settings",

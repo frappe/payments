@@ -43,7 +43,7 @@ function init_payment(){
             "reference_docname": docname
         },
         callback: function(r) {
-           if (r.message.info=="Transaction successful"){
+           if (r.message.info=="200 OK"){
             load_success()
 
            }else {

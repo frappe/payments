@@ -4,7 +4,7 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 import grpc
-from payments.payment_gateways.doctype.custom_payment_settings.databank import wallet_pb2, wallet_pb2_grpc
+from payments.payment_gateways.doctype.custom_payment_settings.databank import users_pb2, users_pb2_grpc, payments_pb2, payments_pb2_grpc
 from payments.payment_gateways.doctype.custom_payment_settings.custom_payment_settings import (
 	get_gateway_controller,
 )
@@ -73,28 +73,20 @@ def make_payment(data, reference_doctype, reference_docname):
 	gateway_controller = get_gateway_controller(reference_docname)
 	reply = frappe.get_doc("Custom Payment Settings", gateway_controller).create_payment_request(data)
 	frappe.db.commit()
-	if reply.info=='Transaction successful':
-		data={'info':reply.info,'balance':reply.monetary}
+	print(reply)
+	if reply.info.information=='200 OK':
+		data={'info':reply.info.information,'balance':reply.balanceAfter}
 
 	else:
-		data={'info':reply.info}
+		data={'info':reply.info.information}
 	return data
 
 def get_balance(reference_docname):
-	print(reference_docname)
-	try:
 		gateway_controller = get_gateway_controller(reference_docname)
 		channel=frappe.get_doc("Custom Payment Settings", gateway_controller).configure_wallet()
-		details= wallet_pb2.user(username='kelvin zawala')
-		stub = wallet_pb2_grpc.walletStub(channel)
-		response = stub.balance(details)
+		domain_url=frappe.get_doc("Custom Payment Settings", gateway_controller).configure_domain()
+		details= users_pb2.request(username=frappe.session.user, domain=domain_url)
+		stub = users_pb2_grpc.userServiceStub(channel)
+		response = stub.GetBalance(details)
 		print(response)
-		return response.monetary
-	except grpc.RpcError as e:
-		frappe.redirect_to_message(
-			_("An Error occurred"),
-			_(f"{e.code()}"),
-		)
-		frappe.local.flags.redirect_location = frappe.local.response.location
-		raise frappe.Redirect
-			
+		return response.balance

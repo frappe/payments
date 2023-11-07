@@ -1,1 +1,1 @@
-from . import wallet_pb2, wallet_pb2_grpc
+from . import users_pb2,users_pb2_grpc,payments_pb2,payments_pb2_grpc

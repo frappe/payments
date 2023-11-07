@@ -11,7 +11,7 @@ import grpc
 from frappe.model.document import Document
 from frappe.utils import call_hook_method, get_url
 import grpc
-from .databank import wallet_pb2, wallet_pb2_grpc
+from .databank import payments_pb2, payments_pb2_grpc
 from payments.utils import create_payment_gateway
 
 class CustomPaymentSettings(Document):
@@ -27,6 +27,9 @@ class CustomPaymentSettings(Document):
 
 	def configure_wallet(self):
 		return grpc.insecure_channel(self.url)
+	
+	def configure_domain(self):
+		return self.domain_url
 
 
 	def validate_transaction_currency(self, currency):
@@ -42,40 +45,33 @@ class CustomPaymentSettings(Document):
 	
 	def create_payment_request(self, data):
 		self.data = frappe._dict(data)
+		return self.create_charge_on_wallet()
 		
-		try:
-			return self.create_charge_on_wallet()
-		except Exception:
-			frappe.log_error('Grpc error')
-			return {
-				"redirect_to": frappe.redirect_to_message(
-					_("Server Error"),
-					_(
-						"There seems to be an issue with the server's Wallet configuration. Don't worry, in case of failure, the amount will get refunded to your account."
-					),
-				),
-				"status": 401,
-			}
 		
 
 	def create_charge_on_wallet(self):
-		channel= self.configure_wallet()
-		details= wallet_pb2.user(username='kelvin zawala',monetary=100)
-		stub = wallet_pb2_grpc.walletStub(channel)
-		response = stub.debit(details)
-		if response.info=='Transaction successful':
-			custom_redirect_to = frappe.get_doc(
+		channel= self.configure_wallet()		
+		domain=self.configure_domain()
+
+		try:
+
+			details= payments_pb2.requests(username=frappe.session.user, domain=domain, amount=float(self.data.amount), balanceType='*monetary')
+			stub = payments_pb2_grpc.paymentsServiceStub(channel)
+			response = stub.DebitAccount(details)
+			print(response.info.information)
+			if response.info.information=='200 OK':
+				custom_redirect_to = frappe.get_doc(
 						self.data.reference_doctype, self.data.reference_docname
 					).run_method("on_payment_authorized", 'Completed')
-			print(custom_redirect_to)
-			return response
-		elif response.info=='Insufficient funds':
-			return response
-		else:
-			frappe.throw(response.info)
+				return response
+		
+			elif response.error.localizedDescription=='Insufficient funds!':
+				frappe.throw('Insufficient funds!')
+			else:
+				frappe.throw("Service Down")
+		except grpc.RpcError as e:
+			frappe.throw(f"{e.code()}")
 
-	def get_balance():
-		pass
 
 def get_gateway_controller(doc):
 	payment_request = frappe.get_doc("Payment Request", doc)
@@ -83,3 +79,4 @@ def get_gateway_controller(doc):
 		"Payment Gateway", payment_request.payment_gateway, "gateway_controller"
 	)
 	return gateway_controller
+
