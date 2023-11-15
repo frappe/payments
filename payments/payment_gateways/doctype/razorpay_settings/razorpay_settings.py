@@ -296,9 +296,12 @@ class RazorpaySettings(Document):
 				custom_redirect_to = None
 				try:
 					frappe.flags.data = data
+					frappe.get_doc(self.data.reference_doctype, self.data.reference_docname).run_method(
+						"on_payment_authorized", self.flags.status_changed_to
+					)
 					custom_redirect_to = frappe.get_doc(
 						self.data.reference_doctype, self.data.reference_docname
-					).run_method("on_payment_authorized", self.flags.status_changed_to)
+					).run_method("on_payment_authorized_redirect", self.flags.status_changed_to)
 
 				except Exception:
 					frappe.log_error(frappe.get_traceback())

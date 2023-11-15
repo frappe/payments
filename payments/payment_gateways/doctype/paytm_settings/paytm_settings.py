@@ -156,9 +156,13 @@ def finalize_request(order_id, transaction_response):
 		if transaction_data.reference_doctype and transaction_data.reference_docname:
 			custom_redirect_to = None
 			try:
-				custom_redirect_to = frappe.get_doc(
+				frappe.get_doc(
 					transaction_data.reference_doctype, transaction_data.reference_docname
 				).run_method("on_payment_authorized", "Completed")
+
+				custom_redirect_to = frappe.get_doc(
+					transaction_data.reference_doctype, transaction_data.reference_docname
+				).run_method("on_payment_authorized_redirect", "Completed")
 				request.db_set("status", "Completed")
 			except Exception:
 				request.db_set("status", "Failed")

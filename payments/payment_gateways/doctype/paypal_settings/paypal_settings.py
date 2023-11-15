@@ -330,10 +330,15 @@ def confirm_payment(token):
 			)
 
 			if data.get("reference_doctype") and data.get("reference_docname"):
+				frappe.get_doc(data.get("reference_doctype"), data.get("reference_docname")).run_method(
+					"on_payment_authorized", "Completed"
+				)
+
+				frappe.db.commit()
+
 				custom_redirect_to = frappe.get_doc(
 					data.get("reference_doctype"), data.get("reference_docname")
-				).run_method("on_payment_authorized", "Completed")
-				frappe.db.commit()
+				).run_method("on_payment_authorized_redirect", "Completed")
 
 			redirect_url = "payment-success?doctype={}&docname={}".format(
 				data.get("reference_doctype"), data.get("reference_docname")
@@ -399,10 +404,16 @@ def create_recurring_profile(token, payerid):
 				data["subscription_id"] = response.get("PROFILEID")[0]
 
 				frappe.flags.data = data
+
+				frappe.get_doc(data.get("reference_doctype"), data.get("reference_docname")).run_method(
+					"on_payment_authorized", status_changed_to
+				)
+
+				frappe.db.commit()
+
 				custom_redirect_to = frappe.get_doc(
 					data.get("reference_doctype"), data.get("reference_docname")
-				).run_method("on_payment_authorized", status_changed_to)
-				frappe.db.commit()
+				).run_method("on_payment_authorized_redirect", status_changed_to)
 
 			redirect_url = "payment-success?doctype={}&docname={}".format(
 				data.get("reference_doctype"), data.get("reference_docname")
