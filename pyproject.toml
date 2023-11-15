@@ -6,7 +6,7 @@ authors = [
 description = "Payments app for frappe"
 requires-python = ">=3.10"
 readme = "README.md"
-dynamic = ["version"]
+version = "0.0.1"
 dependencies = [
     "paytmchecksum~=1.7.0",
     "razorpay~=1.2.0",
