@@ -113,6 +113,8 @@ def accept(web_form, data, docname=None, for_payment=False):
 	if for_payment:
 		web_form.validate_mandatory(doc)
 		doc.run_method("validate_payment")
+		# set payment gateway
+		doc.set("payment_gateway", web_form.payment_gateway)
 
 	if doc.name:
 		if web_form.has_web_form_permission(doc.doctype, doc.name, "write"):
