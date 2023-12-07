@@ -241,12 +241,13 @@ class StripeSettings(Document):
 		redirect_to = self.data.get("redirect_to") or None
 		redirect_message = self.data.get("redirect_message") or None
 		status = self.integration_request.status
+		custom_redirect_to_override = None
 
 		if self.flags.status_changed_to == "Completed":
 			if self.data.reference_doctype and self.data.reference_docname:
 				custom_redirect_to = None
 				try:
-					custom_redirect_to = frappe.get_doc(
+					custom_redirect_to, custom_redirect_to_override = frappe.get_doc(
 						self.data.reference_doctype, self.data.reference_docname
 					).run_method("on_payment_authorized", self.flags.status_changed_to)
 				except Exception:
@@ -267,6 +268,8 @@ class StripeSettings(Document):
 			redirect_url += "?" + urlencode({"redirect_to": redirect_to})
 		if redirect_message:
 			redirect_url += "&" + urlencode({"redirect_message": redirect_message})
+		if custom_redirect_to_override:
+			redirect_url = redirect_to
 
 		return {"redirect_to": redirect_url, "status": status}
 
