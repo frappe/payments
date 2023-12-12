@@ -1,7 +1,7 @@
 import json
 
 import frappe
-from frappe.core.doctype.file import remove_file_by_url
+from frappe.core.doctype.file.utils import remove_file_by_url
 from frappe.rate_limiter import rate_limit
 from frappe.utils import flt
 from frappe.website.doctype.web_form.web_form import WebForm
