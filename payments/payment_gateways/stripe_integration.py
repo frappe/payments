@@ -1,16 +1,14 @@
 # Copyright (c) 2018, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
+import stripe
 import frappe
 from frappe import _
 from frappe.integrations.utils import create_request_log
 
-from erpnext.utilities import payment_app_import_guard
 
 
 def create_stripe_subscription(gateway_controller, data):
-	with payment_app_import_guard():
-		import stripe
 
 	stripe_settings = frappe.get_doc("Stripe Settings", gateway_controller)
 	stripe_settings.data = frappe._dict(data)
@@ -39,8 +37,6 @@ def create_stripe_subscription(gateway_controller, data):
 
 
 def create_subscription_on_stripe(stripe_settings):
-	with payment_app_import_guard():
-		import stripe
 
 	items = []
 	for payment_plan in stripe_settings.payment_plans:
