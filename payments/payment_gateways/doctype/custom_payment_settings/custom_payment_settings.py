@@ -54,8 +54,9 @@ class CustomPaymentSettings(Document):
 		domain=self.configure_domain()
 
 		try:
+			username = frappe.db.get_value("User", frappe.session.user, "username")
 
-			details= payments_pb2.requests(username=frappe.session.user, domain=domain, amount=float(self.data.amount), balanceType='*monetary')
+			details= payments_pb2.requests(username=username, domain=domain, amount=float(self.data.amount), balanceType='*monetary')
 			stub = payments_pb2_grpc.paymentsServiceStub(channel)
 			response = stub.DebitAccount(details)
 			print(response.info.information)
