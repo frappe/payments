@@ -32,7 +32,7 @@ class GoCardlessSettings(Document):
 		from payments.utils import create_payment_gateway
 
 		create_payment_gateway(
-			"GoCardless-" + self.gateway_name, settings="GoCardLess Settings", controller=self.gateway_name
+			"GoCardless-" + self.gateway_name, settings="GoCardless Settings", controller=self.gateway_name
 		)
 		call_hook_method("payment_gateway_enabled", gateway="GoCardless-" + self.gateway_name)
 
