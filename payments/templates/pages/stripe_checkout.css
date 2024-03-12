@@ -1,113 +1,137 @@
-.StripeElement {
-  background-color: white;
-  height: 40px;
-  padding: 10px 12px;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  box-shadow: 0 1px 3px 0 #e6ebf1;
-  -webkit-transition: box-shadow 150ms ease;
-  transition: box-shadow 150ms ease;
+.stripe {
+  min-height: 400px;
+  margin-left: 1rem;
+  margin-right: 1rem;
+}
+/* Variables */
+* {
+  box-sizing: border-box;
 }
 
-.StripeElement--focus {
-  box-shadow: 0 1px 3px 0 #cfd7df;
+form {
+  width: 30vw;
+  min-width: 500px;
+  align-self: center;
+  box-shadow: 0px 0px 0px 0.5px rgba(50, 50, 93, 0.1),
+    0px 2px 5px 0px rgba(50, 50, 93, 0.1), 0px 1px 1.5px 0px rgba(0, 0, 0, 0.07);
+  border-radius: 7px;
+  padding: 40px;
 }
 
-.StripeElement--invalid {
-  border-color: #fa755a;
+.hidden {
+  display: none;
 }
 
-.StripeElement--webkit-autofill {
-  background-color: #fefde5;
+#payment-message {
+  color: rgb(105, 115, 134);
+  font-size: 16px;
+  line-height: 20px;
+  padding-top: 12px;
+  text-align: center;
 }
 
-.stripe #payment-form {
-	margin-top: 80px;
+#payment-element {
+  margin-bottom: 24px;
 }
 
-.stripe button {
-  float: right;
-  display: block;
-  background: #5e64ff;
-  color: white;
-  box-shadow: 0 7px 14px 0 rgba(49, 49, 93, 0.10), 0 3px 6px 0 rgba(0, 0, 0, 0.08);
+/* Buttons and links */
+button {
+  background: #5469d4;
+  font-family: Arial, sans-serif;
+  color: #ffffff;
   border-radius: 4px;
   border: 0;
-  margin-top: 20px;
-  font-size: 15px;
-  font-weight: 400;
-  max-width: 40%;
-  height: 40px;
-  line-height: 38px;
-  outline: none;
+  padding: 12px 16px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: block;
+  transition: all 0.2s ease;
+  box-shadow: 0px 4px 5.5px 0px rgba(0, 0, 0, 0.07);
+  width: 100%;
+}
+button:hover {
+  filter: contrast(115%);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
-.stripe button:hover, .stripe button:focus {
-  background: #2b33ff;
-  border-color: #0711ff;
+/* spinner/processing state, errors */
+.spinner,
+.spinner:before,
+.spinner:after {
+  border-radius: 50%;
 }
-
-.stripe button:active {
-  background: #5e64ff;
-}
-
-.stripe button:disabled {
-  background: #515e80;
-}
-
-.stripe .group {
-  background: white;
-  box-shadow: 2px 7px 14px 2px rgba(49, 49, 93, 0.10), 0 3px 6px 0 rgba(0, 0, 0, 0.08);
-  border-radius: 4px;
-  margin-bottom: 20px;
-}
-
-.stripe label {
+.spinner {
+  color: #ffffff;
+  font-size: 22px;
+  text-indent: -99999px;
+  margin: 0px auto;
   position: relative;
-  color: #8898AA;
-  font-weight: 300;
-  height: 40px;
-  line-height: 40px;
-  margin-left: 20px;
-  display: block;
+  width: 20px;
+  height: 20px;
+  box-shadow: inset 0 0 0 2px;
+  -webkit-transform: translateZ(0);
+  -ms-transform: translateZ(0);
+  transform: translateZ(0);
+}
+.spinner:before,
+.spinner:after {
+  position: absolute;
+  content: "";
+}
+.spinner:before {
+  width: 10.4px;
+  height: 20.4px;
+  background: #5469d4;
+  border-radius: 20.4px 0 0 20.4px;
+  top: -0.2px;
+  left: -0.2px;
+  -webkit-transform-origin: 10.4px 10.2px;
+  transform-origin: 10.4px 10.2px;
+  -webkit-animation: loading 2s infinite ease 1.5s;
+  animation: loading 2s infinite ease 1.5s;
+}
+.spinner:after {
+  width: 10.4px;
+  height: 10.2px;
+  background: #5469d4;
+  border-radius: 0 10.2px 10.2px 0;
+  top: -0.1px;
+  left: 10.2px;
+  -webkit-transform-origin: 0px 10.2px;
+  transform-origin: 0px 10.2px;
+  -webkit-animation: loading 2s infinite ease;
+  animation: loading 2s infinite ease;
 }
 
-.stripe .group label:not(:last-child) {
-  border-bottom: 1px solid #F0F5FA;
+@-webkit-keyframes loading {
+  0% {
+    -webkit-transform: rotate(0deg);
+    transform: rotate(0deg);
+  }
+  100% {
+    -webkit-transform: rotate(360deg);
+    transform: rotate(360deg);
+  }
+}
+@keyframes loading {
+  0% {
+    -webkit-transform: rotate(0deg);
+    transform: rotate(0deg);
+  }
+  100% {
+    -webkit-transform: rotate(360deg);
+    transform: rotate(360deg);
+  }
 }
 
-.stripe label>span {
-  width: 20%;
-  text-align: right;
-  float: left;
+@media only screen and (max-width: 600px) {
+  form {
+    width: 80vw;
+    min-width: initial;
+  }
 }
 
-.current-card {
-	margin-left: 20px;
-}
-
-.field {
-  background: transparent;
-  font-weight: 300;
-  border: 0;
-  color: #31325F;
-  outline: none;
-  padding-right: 10px;
-  padding-left: 10px;
-  cursor: text;
-  width: 70%;
-  height: 40px;
-  float: right;
-}
-
-.field::-webkit-input-placeholder {
-  color: #CFD7E0;
-}
-
-.field::-moz-placeholder {
-  color: #CFD7E0;
-}
-
-.field:-ms-input-placeholder {
-  color: #CFD7E0;
-}

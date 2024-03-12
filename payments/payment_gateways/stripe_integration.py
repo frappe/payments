@@ -7,7 +7,9 @@ from frappe import _
 from frappe.integrations.utils import create_request_log
 
 
+
 def create_stripe_subscription(gateway_controller, data):
+
 	stripe_settings = frappe.get_doc("Stripe Settings", gateway_controller)
 	stripe_settings.data = frappe._dict(data)
 
@@ -35,6 +37,7 @@ def create_stripe_subscription(gateway_controller, data):
 
 
 def create_subscription_on_stripe(stripe_settings):
+
 	items = []
 	for payment_plan in stripe_settings.payment_plans:
 		plan = frappe.db.get_value("Subscription Plan", payment_plan.plan, "product_price_id")

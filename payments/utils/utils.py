@@ -131,6 +131,12 @@ def make_custom_fields():
 						"options": "Currency",
 						"insert_after": "amount",
 					},
+                    {
+						"fieldname": "payment_id",
+						"fieldtype": "Data",
+						"label": "Payment Id",
+						"insert_after": "accept_payment",
+					},
 				]
 			}
 		)
@@ -170,6 +176,7 @@ def delete_custom_fields():
 			"amount_based_on_field",
 			"amount",
 			"currency",
+			"payment_id",
 		)
 
 		for fieldname in fieldnames:

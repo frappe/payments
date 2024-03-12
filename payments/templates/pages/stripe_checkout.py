@@ -36,6 +36,8 @@ def get_context(context):
 		gateway_controller = get_gateway_controller(context.reference_doctype, context.reference_docname)
 		context.publishable_key = get_api_key(context.reference_docname, gateway_controller)
 		context.image = get_header_image(context.reference_docname, gateway_controller)
+		context["payment_id"] = frappe.db.get_value(context.reference_docname, context.reference_doctype, "payment_id")
+		context.payment_id = frappe.db.get_value(context.reference_docname, context.reference_doctype, "payment_id")
 
 		context["amount"] = fmt_money(amount=context["amount"], currency=context["currency"])
 
@@ -71,21 +73,24 @@ def get_header_image(doc, gateway_controller):
 
 
 @frappe.whitelist(allow_guest=True)
-def make_payment(stripe_token_id, data, reference_doctype=None, reference_docname=None):
+def create_payment(data, reference_doctype=None, reference_docname=None):
 	data = json.loads(data)
-
-	data.update({"stripe_token_id": stripe_token_id})
-
 	gateway_controller = get_gateway_controller(reference_doctype, reference_docname)
-
-	if is_a_subscription(reference_doctype, reference_docname):
-		reference = frappe.get_doc(reference_doctype, reference_docname)
-		data = reference.create_subscription("stripe", gateway_controller, data)
-	else:
-		data = frappe.get_doc("Stripe Settings", gateway_controller).create_request(data)
-
+	data = frappe.get_doc("Stripe Settings", gateway_controller).create_request(data)
 	frappe.db.commit()
-	return data
+	return data['client_secret']
+
+
+
+@frappe.whitelist(allow_guest=True)
+def make_payment(data, reference_doctype=None, reference_docname=None):
+	data = json.loads(data)
+	gateway_controller = get_gateway_controller(reference_doctype, reference_docname)
+	payment_id = frappe.get_value(reference_doctype, reference_docname, 'payment_id')
+	#frappe.get_doc(reference_doctype, reference_docname).run_method('on_payment_authorized', 'Completed')
+	finalize = frappe.get_doc("Stripe Settings", gateway_controller).validate_payment(data, payment_id)
+	frappe.db.commit()
+	return finalize
 
 
 def is_a_subscription(reference_doctype, reference_docname):

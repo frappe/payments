@@ -195,11 +195,11 @@ class StripeSettings(Document):
 
 		self.data = frappe._dict(data)
 		stripe.api_key = self.get_password(fieldname="secret_key", raise_exception=False)
-		stripe.default_http_client = stripe.http_client.RequestsClient()
 
 		try:
-			self.integration_request = create_request_log(self.data, service_name="Stripe")
-			return self.create_charge_on_stripe()
+			intent = self.create_payment()
+			self.data.payment_id = intent.id
+			return intent
 
 		except Exception:
 			frappe.log_error(frappe.get_traceback())
@@ -213,24 +213,55 @@ class StripeSettings(Document):
 				"status": 401,
 			}
 
-	def create_charge_on_stripe(self):
+	def create_payment(self):
 		import stripe
 
 		try:
-			charge = stripe.Charge.create(
-				amount=cint(flt(self.data.amount) * 100),
-				currency=self.data.currency,
-				source=self.data.stripe_token_id,
-				description=self.data.description,
-				receipt_email=self.data.payer_email,
-			)
-
-			if charge.captured == True:
-				self.integration_request.db_set("status", "Completed", update_modified=False)
-				self.flags.status_changed_to = "Completed"
-
+			data = self.data
+			payment_id = frappe.get_value(data.reference_doctype, data.reference_docname, 'payment_id')
+			# Create a PaymentIntent with the order amount and currency
+			if payment_id == None:
+				intent = stripe.PaymentIntent.create(
+					amount=cint(flt(data.amount) * 100),
+					currency=data.currency,
+					automatic_payment_methods={
+						'enabled': True,
+					},
+					description=data.description,
+					receipt_email=data.payer_email,
+				)
+				data.payment_id = intent.id
+				self.integration_request = create_request_log(data, service_name="Stripe")
+				frappe.get_doc(data.reference_doctype, data.reference_docname).db_set('payment_id', intent.id)
+				self.integration_request.db_set("status", "Authorized", update_modified=False)
 			else:
-				frappe.log_error(charge.failure_message, "Stripe Payment not completed")
+				intent = stripe.PaymentIntent.retrieve(payment_id)
+
+		except Exception:
+			frappe.log_error(frappe.get_traceback())
+
+		return intent
+
+	def validate_payment(self, data, payment_id):
+		import stripe
+
+		self.data = frappe._dict(data)
+		stripe.api_key = self.get_password(fieldname="secret_key", raise_exception=False)
+
+		try:
+			data = self.data
+			pi = stripe.PaymentIntent.retrieve(payment_id)
+			self.integration_request = frappe.get_last_doc("Integration Request", filters={
+				'integration_request_service': 'Stripe',
+				'reference_doctype': data.reference_doctype, 
+				'reference_docname': data.reference_docname, 
+				'status': 'Authorized'
+				})
+
+			if pi.status != "succeeded":
+				self.integration_request.db_set("status", "Authorized", update_modified=False)
+			else:
+				self.flags.status_changed_to = "Completed"
 
 		except Exception:
 			frappe.log_error(frappe.get_traceback())
@@ -238,17 +269,18 @@ class StripeSettings(Document):
 		return self.finalize_request()
 
 	def finalize_request(self):
-		redirect_to = self.data.get("redirect_to") or None
-		redirect_message = self.data.get("redirect_message") or None
-		status = self.integration_request.status
+		data = self.data
+		flags = self.flags
+		redirect_to = data.get("redirect_to") or None
+		redirect_message = data.get("redirect_message") or None
+		status = flags.status_changed_to
 
-		if self.flags.status_changed_to == "Completed":
-			if self.data.reference_doctype and self.data.reference_docname:
+		if status == 'Completed':
+			if data.reference_doctype and data.reference_docname:
 				custom_redirect_to = None
 				try:
-					custom_redirect_to = frappe.get_doc(
-						self.data.reference_doctype, self.data.reference_docname
-					).run_method("on_payment_authorized", self.flags.status_changed_to)
+					custom_redirect_to = frappe.get_doc(data.reference_doctype, data.reference_docname).run_method("on_payment_authorized", status)
+					self.integration_request.db_set("status", status, update_modified=False)
 				except Exception:
 					frappe.log_error(frappe.get_traceback())
 
