@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package payments;
+option go_package = "prisons/services/payments/paymentspb";
+
+// ANCHOR: new official 
+message requests {
+    string username = 1;
+    string domain = 2;
+    string password = 3;
+    double balance = 4;
+    string email = 5;
+    string package_id = 6;
+    string token = 7;
+    string receiver = 8;
+    double amount = 9;
+    string voucherPin = 10;
+    string debugInfo = 11;
+    string transactionId = 12;
+    string balanceType = 13;
+}
+
+message reply {
+    string username = 1;
+    string domain = 2;
+    string password = 3;
+    double balance = 4;
+    string email = 5;  
+    Status status = 6;
+    string token = 7;
+    Error error = 8;
+    Info info = 9;
+    Success success = 10;
+    double balanceAfter = 11;
+}
+
+enum Status {
+    INFORMATION = 0;
+    SUCCESSFUL = 1;
+    ERROR = 2;
+    FAILURE = 3;
+}
+
+message Error {
+    string localizedDescription = 1;
+    string debugDescription = 2;
+}
+
+message Success {
+    string localizedDescription = 1;
+    string debugDescription = 2;
+}
+
+message Info {
+    string information = 1;
+}
+
+
+service paymentsService {
+
+    rpc CreditAccount(requests) returns (reply){}
+    rpc DebitAccount(requests) returns (reply){}
+
+}

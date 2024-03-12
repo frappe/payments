@@ -1,0 +1,158 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"KolILUyZmE\",\"type\":\"header\",\"data\":{\"text\":\"Payment Gateway Settings<br>\",\"col\":12}},{\"id\":\"hVBlMgWJJl\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Razorpay Credentials\",\"col\":3}},{\"id\":\"h0jWi4WPtw\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New PayPal Credentials\",\"col\":3}},{\"id\":\"lWK7qctJxv\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Braintree Credentials\",\"col\":3}},{\"id\":\"PNR2Hu9VTz\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Paytm Credentials\",\"col\":3}},{\"id\":\"DjUhxfnxCP\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Stripe Credentials\",\"col\":3}},{\"id\":\"LiCnEOy2JX\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"New Custom Payment Settings\",\"col\":3}},{\"id\":\"SvSN3yVfZ7\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"Uv8BZMTFlY\",\"type\":\"card\",\"data\":{\"card_name\":\"Gateway Settings\",\"col\":4}},{\"id\":\"RYb-e772N9\",\"type\":\"card\",\"data\":{\"card_name\":\"Payment Gateway\",\"col\":4}}]",
+ "creation": "2023-10-04 08:32:58.766533",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "money-coins-1",
+ "idx": 0,
+ "is_hidden": 0,
+ "label": "Payment Gateway Settings",
+ "links": [
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Gateway",
+   "link_count": 1,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Payment Gateway",
+   "link_count": 0,
+   "link_to": "Payment Gateway",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Gateway Settings",
+   "link_count": 6,
+   "onboard": 0,
+   "type": "Card Break"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "PayPal Settings",
+   "link_count": 0,
+   "link_to": "PayPal Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Razorpay Settings",
+   "link_count": 0,
+   "link_to": "Razorpay Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Stripe Settings",
+   "link_count": 0,
+   "link_to": "Stripe Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Paytm Settings",
+   "link_count": 0,
+   "link_to": "Paytm Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Braintree Settings",
+   "link_count": 0,
+   "link_to": "Braintree Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Custom Payment Settings",
+   "link_count": 0,
+   "link_to": "Custom Payment Settings",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  }
+ ],
+ "modified": "2023-10-16 11:42:50.969813",
+ "modified_by": "Administrator",
+ "module": "Payments",
+ "name": "Payment Gateway Settings",
+ "number_cards": [],
+ "owner": "kelvinzawala@gmail.com",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 17.0,
+ "shortcuts": [
+  {
+   "color": "Grey",
+   "doc_view": "New",
+   "label": "New Custom Payment Settings",
+   "link_to": "Custom Payment Settings",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "New Razorpay Credentials",
+   "link_to": "Razorpay Settings",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "New PayPal Credentials",
+   "link_to": "PayPal Settings",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "New",
+   "label": "New Braintree Credentials",
+   "link_to": "Braintree Settings",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "New Paytm Credentials",
+   "link_to": "Paytm Settings",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "New",
+   "label": "New Stripe Credentials",
+   "link_to": "Stripe Settings",
+   "type": "DocType"
+  }
+ ],
+ "title": "Payment Gateway Settings"
+}

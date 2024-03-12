@@ -1,0 +1,174 @@
+{% extends "templates/web.html" %}
+
+{% block title %} Payment {% endblock %}
+
+{%- block header -%}{% endblock %}
+{% block script %}
+<script>{% include "templates/includes/wallet.js" %}</script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+
+{% endblock %}
+
+
+{%- block page_content -%}
+<!-- Start your project here-->
+
+<style>
+  .btn-group-vertical>.btn:not(:first-child),
+  .btn-group-vertical>.btn-group:not(:first-child) {
+    margin-top: 0;
+  }
+  
+  .modal-confirm {		
+	color: #636363;
+	width: 325px;
+	font-size: 14px;
+}
+.modal-confirm .modal-content {
+	padding: 20px;
+	border-radius: 5px;
+	border: none;
+}
+.modal-confirm .modal-header {
+	border-bottom: none;   
+	position: relative;
+}
+.modal-confirm h4 {
+	text-align: center;
+	font-size: 26px;
+	margin: 30px 0 -15px;
+}
+.modal-confirm .form-control, .modal-confirm .btn {
+	min-height: 40px;
+	border-radius: 3px; 
+}
+.modal-confirm .close {
+	position: absolute;
+	top: -5px;
+	right: -5px;
+}	
+.modal-confirm .modal-footer {
+	border: none;
+	text-align: center;
+	border-radius: 5px;
+	font-size: 13px;
+}	
+.modal-confirm .icon-box {
+	color: #fff;		
+	position: absolute;
+	margin: 0 auto;
+	left: 0;
+	right: 0;
+	top: -70px;
+	width: 95px;
+	height: 95px;
+	border-radius: 50%;
+	z-index: 9;
+	background: #82ce34;
+	padding: 15px;
+	text-align: center;
+	box-shadow: 0px 2px 2px rgba(0, 0, 0, 0.1);
+}
+.modal-confirm .icon-box i {
+	font-size: 58px;
+	position: relative;
+	top: 3px;
+}
+.modal-confirm.modal-dialog {
+	margin-top: 80px;
+}
+.modal-confirm .btn {
+	color: #fff;
+	border-radius: 4px;
+	background: #82ce34;
+	text-decoration: none;
+	transition: all 0.4s;
+	line-height: normal;
+	border: none;
+}
+.modal-confirm .btn:hover, .modal-confirm .btn:focus {
+	background: #6fb32b;
+	outline: none;
+}
+.trigger-btn {
+	display: inline-block;
+	margin: 100px auto;
+}
+</style>
+<section id="main_section">
+  <div class="d-flex justify-content-between align-items-center mb-5">
+    <div class="d-flex flex-row align-items-center">
+      <h4 class="text-uppercase mt-1">Eco</h4>
+      <span class="ms-2 me-3">Tracker</span>
+    </div>
+    <button type="button" id="cancel" class="btn btn-danger">Cancel and Exit</button>   
+    </div>
+
+  <div class="row">
+
+    <div class="col-md-7 col-lg-7 col-xl-6 mb-4 mb-md-0">
+      <h5 class="mb-3">List of Items</h5>
+      <br>
+
+      
+      <div>
+
+
+        {% for item in items %}
+        <div class="d-flex justify-content-between">
+          <div class="d-flex flex-row mt-1">
+            <h6>{{item.item_code}}</h6>
+          </div>
+          <div class="d-flex flex-row align-items-center text-primary">
+            <span class="ms-1">{{currency}} {{ item.amount }}</span>
+          </div>
+        </div>
+        <p>
+          {{ item.description}}
+        </p>
+        <div
+          class="p-2 d-flex justify-content-between align-items-center"
+          style="background-color: #eee;"
+        >
+          <span>Quantity</span>
+          <span>{{item.stock_qty}}</span>
+        </div>
+        <hr />
+
+        {% endfor %}
+
+
+
+        <button type="button" id="proceed" class="btn btn-primary btn-lg btn-block">Proceed to payment</button>
+      </div>
+    </div>
+    <div class="col-md-5 col-lg-4 col-xl-4 offset-lg-1 offset-xl-2">
+      <div class="p-3" style="background-color: #eee;">
+        <span class="fw-bold">Order Recap</span>
+        <div class="d-flex justify-content-between mt-2">
+          <span>Total Cost</span> <span>{{amount}}</span>
+        </div>
+    
+  
+        <hr />
+        <div class="d-flex justify-content-between mt-2">
+          <span class="lh-sm"
+            >Balance <br />
+            in Wallet
+          </span>
+          <span>{{balance}}</span>
+        </div>
+        <hr />
+        <hr />
+        <div class="d-flex justify-content-between mt-2">
+          <span>Balance after Purchase </span> <span class="text-success">{{pred_balance}}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- End your project here-->
+
+<!-- MDB -->
+<!-- Custom scripts -->
+{% endblock %}

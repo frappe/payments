@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package users;
+option go_package = "prisons/services/users/userpb";
+
+// ANCHOR: new official 
+message request {
+    string username = 1;
+    string domain = 2;
+    string password = 3;
+    double balance = 4;
+    string email = 5;
+    string package_id = 6;
+    string token = 7;
+    string verificationCode = 8;
+    string debugInfo = 9;
+    string cdma = 10;
+    string referalCode = 11;
+    string name = 12;
+    string vcode = 13;
+}
+
+message response {
+    string username = 1;
+    string domain = 2;
+    string password = 3;
+    double balance = 4;
+    string email = 5;  
+    Status status = 6;
+    string token = 7;
+    Error error = 8;
+    Info info = 9;
+    Success success = 10;
+    string alias = 11;
+    string referalCode = 12;
+    string name = 13;
+}
+
+enum Status {
+    INFORMATION = 0;
+    SUCCESS = 1;
+    ERROR = 2;
+    FAILED = 3;
+}
+
+message Error {
+    string localizedDescription = 1;
+    string debugDescription = 2;
+}
+
+message Success {
+    string localizedDescription = 1;
+    string debugDescription = 2;
+}
+
+message Info {
+    string information = 1;
+}
+
+// UserS service rpc definitions
+service userService {
+    rpc GetBalance(request) returns (response);
+}
