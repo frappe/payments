@@ -14,6 +14,7 @@ dependencies = [
     "braintree~=4.20.0",
     "pycryptodome>=3.18.0,<4.0.0",
     "gocardless-pro~=1.22.0",
+    "mollie-api-python~=3.6.0",
 ]
 
 [build-system]
