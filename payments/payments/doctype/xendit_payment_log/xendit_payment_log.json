@@ -1,0 +1,138 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2024-03-17 13:35:16.565892",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_break_kylk",
+  "amended_from",
+  "xendit_account",
+  "doc_type",
+  "document",
+  "amount",
+  "description",
+  "checkout_url",
+  "callback_payload",
+  "respond_payload",
+  "last_updated",
+  "paid_at",
+  "status"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_break_kylk",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "amended_from",
+   "fieldtype": "Link",
+   "label": "Amended From",
+   "no_copy": 1,
+   "options": "Xendit Payment Log",
+   "print_hide": 1,
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "xendit_account",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Xendit Account",
+   "options": "Xendit Settings",
+   "reqd": 1
+  },
+  {
+   "fieldname": "doc_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "DocType",
+   "options": "DocType",
+   "reqd": 1
+  },
+  {
+   "fieldname": "document",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Document",
+   "options": "doc_type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Data",
+   "label": "Description"
+  },
+  {
+   "fieldname": "last_updated",
+   "fieldtype": "Datetime",
+   "label": "Last Updated"
+  },
+  {
+   "fieldname": "callback_payload",
+   "fieldtype": "JSON",
+   "label": "Callback Payload"
+  },
+  {
+   "fieldname": "respond_payload",
+   "fieldtype": "JSON",
+   "label": "Respond Payload"
+  },
+  {
+   "fieldname": "checkout_url",
+   "fieldtype": "Data",
+   "label": "Checkout URL",
+   "options": "URL"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "PENDING\nPAID"
+  },
+  {
+   "fieldname": "paid_at",
+   "fieldtype": "Datetime",
+   "label": "Paid At"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "is_submittable": 1,
+ "links": [],
+ "modified": "2024-03-17 14:18:22.489279",
+ "modified_by": "Administrator",
+ "module": "Payments",
+ "name": "Xendit Payment Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "submit": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [
+  {
+   "color": "Green",
+   "title": "PAID"
+  },
+  {
+   "color": "Gray",
+   "title": "PENDING"
+  }
+ ]
+}
