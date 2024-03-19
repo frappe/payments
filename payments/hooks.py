@@ -64,7 +64,7 @@ doctype_js = {"Web Form" : "public/js/web_form.js"}
 # ------------
 
 before_install = "payments.utils.before_install"
-# after_install = "payments.utils.make_custom_fields"
+after_install = "payments.utils.make_custom_fields"
 
 # Uninstallation
 # ------------
