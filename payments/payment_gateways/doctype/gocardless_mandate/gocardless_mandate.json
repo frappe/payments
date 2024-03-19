@@ -1,0 +1,63 @@
+{
+ "actions": [],
+ "autoname": "field:mandate",
+ "creation": "2018-02-08 11:33:15.721919",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "disabled",
+  "mandate",
+  "gocardless_customer"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "fieldname": "disabled",
+   "fieldtype": "Check",
+   "label": "Disabled"
+  },
+  {
+   "fieldname": "mandate",
+   "fieldtype": "Data",
+   "label": "Mandate",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "gocardless_customer",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "GoCardless Customer",
+   "read_only": 1,
+   "reqd": 1
+  }
+ ],
+ "links": [],
+ "modified": "2023-09-27 10:33:44.453462",
+ "modified_by": "Administrator",
+ "module": "Payment Gateways",
+ "name": "GoCardless Mandate",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "quick_entry": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

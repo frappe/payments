@@ -71,6 +71,23 @@ def make_custom_fields():
 
 		create_custom_fields(custom_fields)
 
+	if "erpnext" in frappe.get_installed_apps():
+		custom_fields = {
+			"GoCardless Mandate": [
+				{
+					"fieldname": "customer",
+					"fieldtype": "Link",
+					"in_list_view": 1,
+					"label": "Customer",
+					"options": "Customer",
+					"reqd": 1,
+					"insert_after": "disabled",
+				}
+			]
+		}
+
+		create_custom_fields(custom_fields)
+
 
 def delete_custom_fields():
 	if frappe.get_meta("Web Form").has_field("payments_tab"):

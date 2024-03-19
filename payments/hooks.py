@@ -120,7 +120,7 @@ scheduler_events = {
 # Testing
 # -------
 
-# before_tests = "pay.install.before_tests"
+before_tests = "erpnext.setup.utils.before_tests"  # To setup company and accounts
 
 # Overriding Methods
 # ------------------------------
