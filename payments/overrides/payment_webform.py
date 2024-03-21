@@ -27,6 +27,8 @@ class PaymentWebForm(WebForm):
 			controller = get_payment_gateway_controller(self.payment_gateway)
 
 			title = f"Payment for {doc.doctype} {doc.name}"
+
+			# Set Amount
 			amount = self.amount
 			if self.amount_based_on_field:
 				amount = doc.get(self.amount_field)
@@ -35,6 +37,16 @@ class PaymentWebForm(WebForm):
 
 			if amount is None or Decimal(amount) <= 0:
 				return frappe.utils.get_url(self.success_url or self.route)
+			
+			# Set Payer Name
+			payer_name = frappe.utils.get_fullname(frappe.session.user)
+			if self.payer_name_based_on_field:
+				payer_name = doc.get(self.payer_name_field)
+
+			# Set Payer Email
+			payer_email = frappe.session.user
+			if self.payer_email_based_on_field:
+				payer_email = doc.get(self.payer_email_field)
 
 			payment_details = {
 				"amount": amount,
@@ -42,8 +54,8 @@ class PaymentWebForm(WebForm):
 				"description": title,
 				"reference_doctype": doc.doctype,
 				"reference_docname": doc.name,
-				"payer_email": frappe.session.user,
-				"payer_name": frappe.utils.get_fullname(frappe.session.user),
+				"payer_email": payer_email,
+				"payer_name": payer_name,
 				"order_id": doc.name,
 				"currency": self.currency,
 				"redirect_to": frappe.utils.get_url(self.success_url or self.route),
@@ -101,6 +113,8 @@ def accept(web_form, data, docname=None, for_payment=False):
 	if for_payment:
 		web_form.validate_mandatory(doc)
 		doc.run_method("validate_payment")
+		# set payment gateway
+		doc.set("payment_gateway", web_form.payment_gateway)
 
 	if doc.name:
 		if web_form.has_web_form_permission(doc.doctype, doc.name, "write"):
