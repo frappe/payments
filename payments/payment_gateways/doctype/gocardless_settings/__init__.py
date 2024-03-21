@@ -27,9 +27,12 @@ def webhooks():
 
 def set_status(event):
 	resource_type = event.get("resource_type", {})
+	reference_doctype = event.get("resource_metadata", {}).get('reference_doctype')
 
 	if resource_type == "mandates":
 		set_mandate_status(event)
+	if resource_type == "payments" and reference_doctype == "Payment Request":
+		set_payment_request_status(event)
 
 
 def set_mandate_status(event):
@@ -52,6 +55,22 @@ def set_mandate_status(event):
 
 	for mandate in mandates:
 		frappe.db.set_value("GoCardless Mandate", mandate, "disabled", disabled)
+
+
+def set_payment_request_status(event):
+	event_action = event["action"]
+	payment_request = event["resource_metadata"]["reference_document"]
+	doc = frappe.get_doc("Payment Request", payment_request)
+	if event_action == "confirmed" and doc.status != "Paid":
+		doc.set_as_paid()
+	if event_action == "cancelled" and doc.status != "Cancelled":
+		doc.set_as_cancelled()
+	if event_action == "failed" and doc.status != "Failed":
+		doc.db_set("status", "Failed")
+		try: # failed reason is a field in ERPNext version 16+, so it may not exist in the database
+			doc.db_set("failed_reason", event["details"]["description"])
+		except:
+			pass
 
 
 def authenticate_signature(r):
