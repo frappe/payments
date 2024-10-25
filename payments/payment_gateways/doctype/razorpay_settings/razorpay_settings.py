@@ -659,6 +659,13 @@ class RazorpaySettings(Document):
 
 		return result
 
+	@frappe.whitelist()
+	def clear(self):
+		self.api_key = self.api_secret = None
+		self.redirect_url = None
+		self.flags.ignore_mandatory = True
+		self.save()
+
 
 def capture_payment(is_sandbox=False, sanbox_response=None):
 	"""
