@@ -51,6 +51,11 @@ def get_context(context):
 			context["amount"] = context["amount"] + " " + _(recurrence)
 
 	else:
+		frappe.log_error(
+			"Missing keys in form_dict",
+			"Expected keys: {0},"
+			"Received keys: {1}".format(expected_keys, list(frappe.form_dict)),
+		)
 		frappe.redirect_to_message(
 			_("Some information is missing"),
 			_("Looks like someone sent you to an incomplete URL. Please ask them to look into it."),
