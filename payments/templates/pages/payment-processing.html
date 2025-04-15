@@ -1,0 +1,29 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ _("Payment Initiated") }}{% endblock %}
+
+{% block page_content %}
+<div class='page-card'>
+	<div class='page-card-head'>
+		<span class='indicator orange'>
+			{{ _("Hold Tight! Payment is in Progress") }}
+		</span>
+	</div>
+	<p>{{ _("Your payment has been successfully initiated and is currently being processed.") }}</p>
+	<p>{{ _("Sometimes it takes a little while for the bank to confirm the transaction.") }}</p>
+	<p>{{ _("No worries — the status will update automatically once we receive a response.") }}</p>
+	<p>{{ _("You can safely return now, and we’ll keep tracking the update in the background.") }}</p>
+	<div>
+		<a href='{{ frappe.form_dict.redirect_to or "/" }}' class='btn btn-primary btn-sm'>
+			{{ _("Continue") }}
+		</a>
+	</div>
+</div>
+
+<style>
+.hero-and-content {
+	background-color: #f5f7fa;
+}
+{% include "templates/styles/card_style.css" %}
+</style>
+{% endblock %}
