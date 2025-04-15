@@ -39,8 +39,8 @@ class BankMuscatSettings(Document):
 		return (cipher.nonce + ciphertext + tag).hex()
 
 	def get_merchant_data(self, **kwargs):
-		base_url = "https://fb54-223-185-26-209.ngrok-free.app/api/method/payments.templates.pages.bankmuscat_checkout"
-		# base_url = get_url("api/method/payments.templates.pages.bankmuscat_checkout")
+		# base_url = "https://fb54-223-185-26-209.ngrok-free.app/api/method/payments.templates.pages.bankmuscat_checkout"
+		base_url = get_url("api/method/payments.templates.pages.bankmuscat_checkout")
 
 		merchant_data = {
 			"merchant_id": kwargs.get("merchant_id", str(self.merchant_id)),
@@ -116,7 +116,6 @@ class BankMuscatSettings(Document):
 				<script language="javascript">document.redirect.submit();</script>
 			</form>"""
 		).safe_substitute(encReq=encrypted_req, xscode=xscode, action_url=action_url)
-		print("HTML: ", html)
 
 		return html
 
@@ -129,3 +128,7 @@ def get_gateway_controller(doctype, docname, payment_gateway=None):
 		reference_doc = frappe.get_doc(doctype, docname)
 		payment_gateway = reference_doc.payment_gateway
 	return frappe.db.get_value("Payment Gateway", payment_gateway, "gateway_controller")
+
+
+def store_custom_name(doc, method=None):
+	doc.db_set("custom_name", doc.name.replace("-", ""))
