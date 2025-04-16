@@ -10,7 +10,7 @@ from payments.utils import create_payment_gateway
 
 
 class BankMuscatSettings(Document):
-	supported_currencies = ("INR", "OMR", "AED", "USD", "GBP", "EUR")
+	supported_currencies = ("OMR", "AED", "USD", "GBP", "EUR")
 
 	def on_update(self):
 		create_payment_gateway(
@@ -44,8 +44,7 @@ class BankMuscatSettings(Document):
 		merchant_data = {
 			"merchant_id": kwargs.get("merchant_id", str(self.merchant_id)),
 			"order_id": (kwargs.get("order_id") or str(self.order_id)).replace("-", ""),
-			# "currency": kwargs.get("currency") or "OMR",
-			"currency": "OMR",
+			"currency": kwargs.get("currency") or "OMR",
 			"amount": str(kwargs.get("amount", "")),
 			"redirect_url": f"{base_url}.verify_payment_status",
 			"cancel_url": f"{base_url}.cancel_payment",
