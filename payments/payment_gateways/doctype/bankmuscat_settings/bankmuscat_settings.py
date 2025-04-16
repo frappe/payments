@@ -39,7 +39,6 @@ class BankMuscatSettings(Document):
 		return (cipher.nonce + ciphertext + tag).hex()
 
 	def get_merchant_data(self, **kwargs):
-		# base_url = "https://fb54-223-185-26-209.ngrok-free.app/api/method/payments.templates.pages.bankmuscat_checkout"
 		base_url = get_url("api/method/payments.templates.pages.bankmuscat_checkout")
 
 		merchant_data = {
