@@ -1,7 +1,8 @@
 import json
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode
 
 import frappe
+import requests
 from frappe import _
 from frappe.integrations.utils import create_request_log
 from frappe.utils import flt, get_url, getdate
@@ -67,55 +68,72 @@ def get_payment_url(data=None):
 
 
 def handle_payment_response(data_dict, reference_doctype, reference_docname):
-	data_dict = frappe._dict(data_dict)
+	data = frappe._dict(data_dict)
 
-	if data_dict.order_status == "Success":
-		try:
-			doc_name = frappe.get_value("Payment Request", {"custom_name": data_dict.get("order_id")})
-			payment_request = frappe.get_doc("Payment Request", doc_name)
+	frappe.logger().info(f"BankMuscat Response: {json.dumps(data, indent=2)}")
+
+	order_no = data.get("order_id") or data.get("order_no")
+	doc_name = frappe.get_value("Payment Request", {"custom_name": order_no})
+
+	if not doc_name:
+		frappe.throw(f"No Payment Request found for order_no: {order_no}")
+
+	payment_request = frappe.get_doc("Payment Request", doc_name)
+
+	# Save tracking ID if not already saved
+	if payment_request.status == "Initiated" and not payment_request.custom_payment_reference_no:
+		payment_request.db_set("custom_payment_reference_no", data.get("tracking_id"))
+
+	order_status = data.get("order_status", "").lower()
+
+	try:
+		if order_status == "success":
 			payment_entry = payment_request.set_as_paid()
 			payment_request.db_set("transaction_status", "The payment has been completed")
 
-			# update reference no and date in payment entry
 			frappe.db.set_value(
 				"Payment Entry",
 				payment_entry.name,
-				{"reference_no": data_dict.bank_ref_no, "reference_date": getdate(data_dict.trans_date)},
+				{"reference_no": data.get("bank_ref_no"), "reference_date": getdate(data.get("trans_date"))},
 			)
 
-			frappe.log_error("Payment Entry", payment_entry)
-		except Exception:
-			frappe.log_error("Error while mark as paid..", frappe.get_traceback())
-		else:
 			frappe.db.set_value(
-				"Integration Request",
-				data_dict.order_id,
-				{"status": "Completed", "output": json.dumps(data_dict, indent=4)},
+				"Integration Request", doc_name, {"status": "Completed", "output": json.dumps(data, indent=4)}
 			)
-			redirect_url = "payment-success"
-			redirect_url += "?" + urlencode({"doctype": reference_doctype})
-			redirect_url += "&" + urlencode({"docname": reference_docname})
 
-			frappe.local.response["type"] = "redirect"
-			frappe.local.response["location"] = get_url(redirect_url)
-	else:
-		try:
-			doc_name = frappe.get_value("Payment Request", {"custom_name": data_dict.get("order_id")})
-			payment_request = frappe.get_doc("Payment Request", doc_name)
+			return redirect_response("payment-success")
 
-			payment_request.set_as_failed()
-		except Exception:
-			frappe.log_error("Error while mark as failed..", frappe.get_traceback())
-		else:
+		elif order_status in ("failure", "invalid", "timeout"):
+			payment_request.db_set("status", "Failed")
+			payment_request.db_set("transaction_status", "Payment Not Completed")
+
 			frappe.db.set_value(
-				"Integration Request",
-				doc_name,
-				{"status": "Failed", "error": json.dumps(data_dict, indent=4)},
+				"Integration Request", doc_name, {"status": "Failed", "error": json.dumps(data, indent=4)}
 			)
 
-		redirect_url = "payment-failed"
-		frappe.local.response["type"] = "redirect"
-		frappe.local.response["location"] = get_url(redirect_url)
+			return redirect_response("payment-failed")
+
+		elif order_status == "aborted":
+			try:
+				payment_request.set_as_cancelled()
+				payment_request.db_set("transaction_status", "Payment Cancelled")
+
+				frappe.db.set_value(
+					"Integration Request",
+					doc_name,
+					{"status": "Cancelled", "error": json.dumps(data, indent=4)},
+				)
+
+				return redirect_response("payment-cancel")
+
+			except Exception:
+				frappe.log_error("Error during cancel_payment()", frappe.get_traceback())
+		else:
+			payment_request.db_set("transaction_status", "Waiting for Payment Response")
+			return redirect_response("payment-processing", reference_doctype, reference_docname)
+
+	except Exception:
+		frappe.log_error("Error while processing payment response", frappe.get_traceback())
 
 
 def handle_payment_page_response(
@@ -207,9 +225,7 @@ def handle_payment_page_response(
 @frappe.whitelist(allow_guest=True)
 def verify_payment_status():
 	data = frappe.form_dict
-	print("data: ", data)
 	order_id = frappe.db.get_value("Payment Request", {"custom_name": data.get("orderNo")})
-	print("order_id: ", order_id)
 	if order_id and frappe.db.exists("Integration Request", order_id):
 		order_details = frappe.parse_json(frappe.db.get_value("Integration Request", order_id, "data"))
 		reference_doctype = order_details.get("reference_doctype")
@@ -307,15 +323,126 @@ def verify_payment_status():
 @frappe.whitelist(allow_guest=True)
 def cancel_payment():
 	data = frappe.form_dict
+	doc_name = frappe.get_value("Payment Request", {"custom_name": data.get("orderNo")})
 
-	if frappe.db.exists("Integration Request", data.get("orderNo")):
-		frappe.db.set_value("Integration Request", data.get("orderNo"), "status", "Cancelled")
+	if frappe.db.exists("Integration Request", doc_name):
+		frappe.db.set_value("Integration Request", doc_name, "status", "Cancelled")
 		try:
-			payment_request = frappe.get_doc("Payment Request", data.get("order_id"))
+			payment_request = frappe.get_doc("Payment Request", doc_name)
 			payment_request.set_as_cancelled()
 		except Exception:
 			frappe.log_error("Error while mark as Cancelled..", frappe.get_traceback())
 
-	redirect_url = "payment-cancel"
+	return redirect_response("payment-cancel")
+
+
+def redirect_response(page, doctype=None, docname=None):
+	user = frappe.session.user
+
+	if user != "Guest":
+		return True
+
+	query_params = {}
+
+	if doctype:
+		query_params["doctype"] = doctype
+	if docname:
+		query_params["docname"] = docname
+
+	url = f"{page}"
+	if query_params:
+		url += "?" + urlencode(query_params)
+
 	frappe.local.response["type"] = "redirect"
-	frappe.local.response["location"] = get_url(redirect_url)
+	frappe.local.response["location"] = get_url(url)
+
+
+def check_payment_status():
+	payment_requests = frappe.get_all(
+		"Payment Request",
+		filters={"status": "Initiated"},
+		fields=["name", "custom_name", "custom_payment_reference_no", "payment_gateway"],
+	)
+
+	filtered_requests = [
+		pr
+		for pr in payment_requests
+		if pr.custom_payment_reference_no
+		and pr.payment_gateway
+		and pr.payment_gateway.startswith("BankMuscat-")
+	]
+
+	# Call get_payment_status for each filtered payment request
+	for pr in filtered_requests:
+		try:
+			get_payment_status(pr.name)
+		except Exception:
+			frappe.log_error(
+				title="check_payment_status",
+				message=f"Error calling get_payment_status for {pr.name}: {frappe.get_traceback()}",
+			)
+
+
+@frappe.whitelist()
+def get_payment_status(payment_request):
+	try:
+		doc = frappe.get_doc("Payment Request", payment_request)
+
+		reference_no = doc.custom_payment_reference_no
+		order_no = doc.name
+
+		if not reference_no or not order_no:
+			frappe.throw("Missing order number or reference number")
+
+		# Prepare payload
+		request_payload = {
+			"order_id": order_no,
+			"reference_no": reference_no,
+		}
+		json_data = json.dumps(request_payload)
+
+		# Get Gateway name from account format e.g., "bankmuscat-1234"
+		gateway_name = doc.payment_gateway.split("-")[1]
+		bankmuscat_settings = frappe.get_doc("BankMuscat Settings", gateway_name)
+
+		encrypted_data = bankmuscat_settings.encrypt(
+			json_data, bankmuscat_settings.get_password("working_key")
+		)
+		access_code = bankmuscat_settings.get_password("access_code")
+
+		payload = {
+			"enc_request": encrypted_data,
+			"access_code": access_code,
+			"request_type": "JSON",
+			"response_type": "JSON",
+			"command": "orderStatusTracker",
+			"version": "1.2",
+		}
+
+		SMARTPAY_URL = (
+			"https://spayuatapi.bmtest.om/apis/servlet/DoWebTrans?"
+			if bankmuscat_settings.custom_uat == "Staging"
+			else "https://smartpayapi.bankmuscat.com/apis/servlet/DoWebTrans?"
+		)
+
+		# Make request to SmartPay
+		response = requests.post(SMARTPAY_URL, data=payload)
+		parsed_response = dict(parse_qsl(response.text))
+
+		if parsed_response.get("status") != "0":
+			frappe.throw("API request failed: " + parsed_response.get("enc_response", ""))
+
+		# Decrypt and parse final response
+		decrypted_data = bankmuscat_settings.decrypt(
+			parsed_response["enc_response"], bankmuscat_settings.get_password("working_key")
+		)
+		decrypted_json = json.loads(decrypted_data)
+
+		# Payment status handling
+		return handle_payment_response(decrypted_json, "Payment Request", payment_request)
+
+	except Exception:
+		frappe.log_error(
+			title="get_payment_status", message="BankMuscat Payment Status API Error: frappe.get_traceback()"
+		)
+		return {"status": "error", "message": frappe.get_traceback()}
