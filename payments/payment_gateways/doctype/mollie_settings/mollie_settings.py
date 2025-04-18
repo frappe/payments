@@ -108,17 +108,23 @@ class MollieSettings(Document):
 				status = "Completed"
 			elif payment.is_pending():
 				status = "Pending"
-				paymentUrl = payment['_links']['checkout']['href']
+				if 'checkout' in payment['_links']:
+					paymentUrl = payment['_links']['checkout']['href']
+				else:
+					status = "Cancelled"
 			elif payment.is_open():
 				status = "Open"
-				paymentUrl = payment['_links']['checkout']['href']
+				if 'checkout' in payment['_links']:
+					paymentUrl = payment['_links']['checkout']['href']
+				else:
+					status = "Cancelled"
 			else:
 				status = "Cancelled"
 			
 			return {"paymentUrl": paymentUrl, "status": status}
 
 		except Exception:
-			frappe.log_error(frappe.get_traceback())
+			frappe.log_error(frappe.get_traceback()[:140])
 			return f"API call failed"
 
 	def create_charge_on_mollie(self):
@@ -149,7 +155,7 @@ class MollieSettings(Document):
                 'redirectUrl': redirect_url,
             }
 
-			if self.data.payer_email and not self.data.payer_email == "Guest":
+			if self.data.payer_email and not self.data.payer_email == "Guest" and frappe.utils.validate_email_address(self.data.payer_email):
 				charge_data['billingAddress'] = {
 					'email': self.data.payer_email
 				}
