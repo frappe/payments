@@ -9,6 +9,7 @@ from payments.payment_gateways.doctype.paytm_settings.paytm_settings import (
 	get_paytm_config,
 	get_paytm_params,
 )
+from payments.utils.utils import validate_integration_request
 
 
 def get_context(context):
@@ -16,6 +17,8 @@ def get_context(context):
 	paytm_config = get_paytm_config()
 
 	try:
+		validate_integration_request(frappe.form_dict["order_id"])
+
 		doc = frappe.get_doc("Integration Request", frappe.form_dict["order_id"])
 
 		context.payment_details = get_paytm_params(json.loads(doc.data), doc.name, paytm_config)

@@ -50,5 +50,5 @@ jobs:
 
       - name: Run Semgrep rules
         run: |
-          pip install semgrep==0.97.0
+          pip install semgrep==1.90.0
           semgrep ci --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness

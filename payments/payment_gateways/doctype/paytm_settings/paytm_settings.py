@@ -24,7 +24,7 @@ from payments.utils import create_payment_gateway
 
 
 class PaytmSettings(Document):
-	supported_currencies = ["INR"]
+	supported_currencies = ("INR",)
 
 	def validate(self):
 		create_payment_gateway("Paytm")
@@ -75,7 +75,6 @@ def get_paytm_config():
 
 
 def get_paytm_params(payment_details, order_id, paytm_config):
-
 	# initialize a dictionary
 	paytm_params = dict()
 
@@ -127,9 +126,7 @@ def verify_transaction(**paytm_params):
 			http_status_code=401,
 			indicator_color="red",
 		)
-		frappe.log_error(
-			"Order unsuccessful. Failed Response:" + cstr(paytm_params), "Paytm Payment Failed"
-		)
+		frappe.log_error("Order unsuccessful. Failed Response:" + cstr(paytm_params), "Paytm Payment Failed")
 
 
 def verify_transaction_status(paytm_config, order_id):

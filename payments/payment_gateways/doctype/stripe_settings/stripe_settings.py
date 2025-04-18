@@ -1,6 +1,7 @@
 # Copyright (c) 2017, Frappe Technologies and contributors
 # License: MIT. See LICENSE
 
+from types import MappingProxyType
 from urllib.parse import urlencode
 
 import frappe
@@ -11,9 +12,27 @@ from frappe.utils import call_hook_method, cint, flt, get_url
 
 from payments.utils import create_payment_gateway
 
+currency_wise_minimum_charge_amount = {
+	"JPY": 50,
+	"MXN": 10,
+	"DKK": 2.50,
+	"HKD": 4.00,
+	"NOK": 3.00,
+	"SEK": 3.00,
+	"USD": 0.50,
+	"AUD": 0.50,
+	"BRL": 0.50,
+	"CAD": 0.50,
+	"CHF": 0.50,
+	"EUR": 0.50,
+	"GBP": 0.30,
+	"NZD": 0.50,
+	"SGD": 0.50,
+}
+
 
 class StripeSettings(Document):
-	supported_currencies = [
+	supported_currencies = (
 		"AED",
 		"ALL",
 		"ANG",
@@ -128,25 +147,9 @@ class StripeSettings(Document):
 		"XPF",
 		"YER",
 		"ZAR",
-	]
+	)
 
-	currency_wise_minimum_charge_amount = {
-		"JPY": 50,
-		"MXN": 10,
-		"DKK": 2.50,
-		"HKD": 4.00,
-		"NOK": 3.00,
-		"SEK": 3.00,
-		"USD": 0.50,
-		"AUD": 0.50,
-		"BRL": 0.50,
-		"CAD": 0.50,
-		"CHF": 0.50,
-		"EUR": 0.50,
-		"GBP": 0.30,
-		"NZD": 0.50,
-		"SGD": 0.50,
-	}
+	currency_wise_minimum_charge_amount = MappingProxyType(currency_wise_minimum_charge_amount)
 
 	def on_update(self):
 		create_payment_gateway(
@@ -225,7 +228,7 @@ class StripeSettings(Document):
 				receipt_email=self.data.payer_email,
 			)
 
-			if charge.captured == True:
+			if charge.captured is True:
 				self.integration_request.db_set("status", "Completed", update_modified=False)
 				self.flags.status_changed_to = "Completed"
 
@@ -255,9 +258,7 @@ class StripeSettings(Document):
 				if custom_redirect_to:
 					redirect_to = custom_redirect_to
 
-				redirect_url = "payment-success?doctype={}&docname={}".format(
-					self.data.reference_doctype, self.data.reference_docname
-				)
+				redirect_url = f"payment-success?doctype={self.data.reference_doctype}&docname={self.data.reference_docname}"
 
 			if self.redirect_url:
 				redirect_url = self.redirect_url
@@ -276,9 +277,9 @@ class StripeSettings(Document):
 		return {"redirect_to": redirect_url, "status": status}
 
 
-def get_gateway_controller(doctype, docname):
-	reference_doc = frappe.get_doc(doctype, docname)
-	gateway_controller = frappe.db.get_value(
-		"Payment Gateway", reference_doc.payment_gateway, "gateway_controller"
-	)
+def get_gateway_controller(doctype, docname, payment_gateway=None):
+	if not payment_gateway:
+		reference_doc = frappe.get_doc(doctype, docname)
+		payment_gateway = reference_doc.payment_gateway
+	gateway_controller = frappe.db.get_value("Payment Gateway", payment_gateway, "gateway_controller")
 	return gateway_controller

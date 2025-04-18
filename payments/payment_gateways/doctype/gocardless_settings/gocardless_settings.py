@@ -13,7 +13,7 @@ from frappe.utils import call_hook_method, cint, flt, get_url
 
 
 class GoCardlessSettings(Document):
-	supported_currencies = ["EUR", "DKK", "GBP", "SEK", "AUD", "NZD", "CAD", "USD"]
+	supported_currencies = ("EUR", "DKK", "GBP", "SEK", "AUD", "NZD", "CAD", "USD")
 
 	def validate(self):
 		self.initialize_client()
@@ -21,9 +21,7 @@ class GoCardlessSettings(Document):
 	def initialize_client(self):
 		self.environment = self.get_environment()
 		try:
-			self.client = gocardless_pro.Client(
-				access_token=self.access_token, environment=self.environment
-			)
+			self.client = gocardless_pro.Client(access_token=self.access_token, environment=self.environment)
 			return self.client
 		except Exception as e:
 			frappe.throw(e)
@@ -64,7 +62,6 @@ class GoCardlessSettings(Document):
 			return True
 
 	def check_mandate_validity(self, data):
-
 		if frappe.db.exists("GoCardless Mandate", dict(customer=data.get("payer_name"), disabled=0)):
 			registered_mandate = frappe.db.get_value(
 				"GoCardless Mandate", dict(customer=data.get("payer_name"), disabled=0), "mandate"
@@ -124,9 +121,7 @@ class GoCardlessSettings(Document):
 		redirect_to = self.data.get("redirect_to") or None
 		redirect_message = self.data.get("redirect_message") or None
 
-		reference_doc = frappe.get_doc(
-			self.data.get("reference_doctype"), self.data.get("reference_docname")
-		)
+		reference_doc = frappe.get_doc(self.data.get("reference_doctype"), self.data.get("reference_docname"))
 		self.initialize_client()
 
 		try:
@@ -172,7 +167,7 @@ class GoCardlessSettings(Document):
 				frappe.log_error("Gocardless payment failed")
 				self.integration_request.db_set("error", payment.status, update_modified=False)
 
-		except Exception as e:
+		except Exception:
 			frappe.log_error("GoCardless Payment Error")
 
 		if self.flags.status_changed_to == "Completed":

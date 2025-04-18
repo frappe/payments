@@ -22,42 +22,26 @@
 }
 
 .stripe #payment-form {
-	margin-top: 80px;
+	margin-top: 2rem;
 }
 
 .stripe button {
   float: right;
   display: block;
-  background: #5e64ff;
+  background: #171717;
   color: white;
-  box-shadow: 0 7px 14px 0 rgba(49, 49, 93, 0.10), 0 3px 6px 0 rgba(0, 0, 0, 0.08);
-  border-radius: 4px;
+  border-radius: 8px;
   border: 0;
-  margin-top: 20px;
-  font-size: 15px;
-  font-weight: 400;
+  font-size: 14px;
+  font-weight: 420;
   max-width: 40%;
   height: 40px;
   line-height: 38px;
   outline: none;
 }
 
-.stripe button:hover, .stripe button:focus {
-  background: #2b33ff;
-  border-color: #0711ff;
-}
-
-.stripe button:active {
-  background: #5e64ff;
-}
-
-.stripe button:disabled {
-  background: #515e80;
-}
-
 .stripe .group {
   background: white;
-  box-shadow: 2px 7px 14px 2px rgba(49, 49, 93, 0.10), 0 3px 6px 0 rgba(0, 0, 0, 0.08);
   border-radius: 4px;
   margin-bottom: 20px;
 }
@@ -78,8 +62,11 @@
 
 .stripe label>span {
   width: 20%;
-  text-align: right;
   float: left;
+  color: #525252;
+  font-size: 13px;
+  font-weight: 420;
+  letter-spacing: 0.02em;
 }
 
 .current-card {
@@ -87,17 +74,18 @@
 }
 
 .field {
-  background: transparent;
-  font-weight: 300;
-  border: 0;
-  color: #31325F;
-  outline: none;
-  padding-right: 10px;
-  padding-left: 10px;
-  cursor: text;
+  border-radius: 8px;
+  letter-spacing: 0.02em;
+  font-size: 14px;
+  font-weight: 420;
   width: 70%;
-  height: 40px;
   float: right;
+  border: none;
+  height: 28px;
+  padding: 6px 8px;
+  color: #383838;
+  background: #f3f3f3;
+  background-clip: padding-box;
 }
 
 .field::-webkit-input-placeholder {

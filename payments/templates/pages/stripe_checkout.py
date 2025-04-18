@@ -20,8 +20,8 @@ expected_keys = (
 	"reference_docname",
 	"payer_name",
 	"payer_email",
-	"order_id",
 	"currency",
+	"payment_gateway",
 )
 
 
@@ -32,8 +32,9 @@ def get_context(context):
 	if not (set(expected_keys) - set(list(frappe.form_dict))):
 		for key in expected_keys:
 			context[key] = frappe.form_dict[key]
-
-		gateway_controller = get_gateway_controller(context.reference_doctype, context.reference_docname)
+		gateway_controller = get_gateway_controller(
+			context.reference_doctype, context.reference_docname, context.payment_gateway
+		)
 		context.publishable_key = get_api_key(context.reference_docname, gateway_controller)
 		context.image = get_header_image(context.reference_docname, gateway_controller)
 
@@ -71,12 +72,12 @@ def get_header_image(doc, gateway_controller):
 
 
 @frappe.whitelist(allow_guest=True)
-def make_payment(stripe_token_id, data, reference_doctype=None, reference_docname=None):
+def make_payment(stripe_token_id, data, reference_doctype=None, reference_docname=None, payment_gateway=None):
 	data = json.loads(data)
 
 	data.update({"stripe_token_id": stripe_token_id})
 
-	gateway_controller = get_gateway_controller(reference_doctype, reference_docname)
+	gateway_controller = get_gateway_controller(reference_doctype, reference_docname, payment_gateway)
 
 	if is_a_subscription(reference_doctype, reference_docname):
 		reference = frappe.get_doc(reference_doctype, reference_docname)

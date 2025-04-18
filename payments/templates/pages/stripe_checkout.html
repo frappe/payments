@@ -17,23 +17,25 @@
 		{% if image %}
 			<img src={{image}}>
 		{% endif %}
-		<h2 class="text-center">{{description}}</h2>
+		<h4 class="text-center">
+			{{description}}
+		</h4>
 		<form id="payment-form">
 			<div class="form-row row">
 				<div class="group col-12">
 					<div>
 						<label>
 							<span>{{ _("Name") }}</span>
-						<input id="cardholder-name" name="cardholder-name" class="field" placeholder="{{ _('John Doe') }}" value="{{payer_name}}"/>
-					</label>
+							<input id="cardholder-name" name="cardholder-name" class="field" placeholder="{{ _('John Doe') }}" value="{{payer_name}}"/>
+						</label>
 					</div>
 				</div>
 				<div class="group col-12">
 					<div>
 						<label>
 							<span>{{ _("Email") }}</span>
-						<input id="cardholder-email" name="cardholder-email" class="field" placeholder="{{ _('john@doe.com') }}" value="{{payer_email}}"/>
-					</label>
+							<input id="cardholder-email" name="cardholder-email" class="field" placeholder="{{ _('john@doe.com') }}" value="{{payer_email}}"/>
+						</label>
 					</div>
 				</div>
 				<div class="group col-12">
@@ -45,7 +47,7 @@
 			</div>
 
 			</div>
-			<button type="submit" class="submit" id="submit">{{_('Pay')}} {{amount}}</button>
+			<button type="submit" class="submit mb-4" id="submit">{{_('Pay')}} {{amount}}</button>
 			<div class="outcome text-center">
 				<div class="error" hidden>{{ _("An error occured during the payment process. Please contact us.") }}</div>
 				<div class="success" hidden>{{ _("Your payment has been successfully registered.") }}</div>
