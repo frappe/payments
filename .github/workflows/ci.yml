@@ -46,7 +46,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install MariaDB Client
-        run: sudo apt-get -y install mariadb-client-10.6
+        run: sudo apt-get -y install mariadb-client
 
       - name: Setup Python
         uses: actions/setup-python@v5
