@@ -7,6 +7,7 @@ from json import dumps
 import frappe
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
 from erpnext.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_invoice
+from erpnext.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
 from erpnext.accounts.doctype.pos_profile.test_pos_profile import make_pos_profile
 from erpnext.stock.doctype.item.test_item import make_item
 
@@ -26,7 +27,7 @@ class TestMpesaSettings(unittest.TestCase):
 
 		self.customer = create_customer("_Test Customer", "USD")
 		self.item = make_item(properties={"is_stock_item": 1}).name
-		self.pos_profile = make_pos_profile(
+		pos_profile = make_pos_profile(
 			company="Wind Power LLC",
 			cost_center="Main - WP",
 			currency="USD",
@@ -37,7 +38,9 @@ class TestMpesaSettings(unittest.TestCase):
 			warehouse="Stores - WP",
 			write_off_account="Write Off - WP",
 			write_off_cost_center="Main - WP",
-		).name
+		)
+		self.pos_profile = pos_profile.name
+		create_opening_entry(pos_profile, frappe.session.user)
 
 	def tearDown(self):
 		frappe.db.sql("delete from `tabMpesa Settings`")
