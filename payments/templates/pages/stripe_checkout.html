@@ -11,48 +11,55 @@
 {% endblock %}
 
 {%- block page_content -%}
+<div class="container mt-5">
+	<div class="row justify-content-center">
+		<div class="col-lg-8 col-md-10 col-sm-12">
+			<div class="card shadow-sm p-4">
+				{% if image %}
+				<div class="text-center mb-4">
+					<img src="{{image}}" alt="Payment Image" class="img-fluid">
+				</div>
+				{% endif %}
 
-<div class="stripe" id="payment-section">
-	<div class="col-sm-10 col-sm-offset-2">
-		{% if image %}
-			<img src={{image}}>
-		{% endif %}
-		<h4 class="text-center">
-			{{description}}
-		</h4>
-		<form id="payment-form">
-			<div class="form-row row">
-				<div class="group col-12">
-					<div>
-						<label>
-							<span>{{ _("Name") }}</span>
-							<input id="cardholder-name" name="cardholder-name" class="field" placeholder="{{ _('John Doe') }}" value="{{payer_name}}"/>
-						</label>
-					</div>
-				</div>
-				<div class="group col-12">
-					<div>
-						<label>
-							<span>{{ _("Email") }}</span>
-							<input id="cardholder-email" name="cardholder-email" class="field" placeholder="{{ _('john@doe.com') }}" value="{{payer_email}}"/>
-						</label>
-					</div>
-				</div>
-				<div class="group col-12">
-					<label>
-					<span>{{ _("Card Details") }}</span>
-				<div id="card-element" name="card-element" class="field"></div>
-				<div id="card-errors" role="alert"></div>
-			</label>
+				<h2 class="text-center mb-4">{{ description }}</h2>
 			</div>
 
-			</div>
-			<button type="submit" class="submit mb-4" id="submit">{{_('Pay')}} {{amount}}</button>
-			<div class="outcome text-center">
-				<div class="error" hidden>{{ _("An error occured during the payment process. Please contact us.") }}</div>
-				<div class="success" hidden>{{ _("Your payment has been successfully registered.") }}</div>
-			</div>
-		</form>
+			<form id="payment-form">
+				<div class="form-row mb-3">
+					<div class="group col-12">
+						<label for="cardholder-name">{{ _("Name") }}</label>
+						<input id="cardholder-name" disabled name="cardholder-name" class="form-control"
+							placeholder="{{ _('John Doe') }}" value="{{ payer_name }}" required />
+					</div>
+				</div>
+				<div class="form-row mb-3">
+					<div class="group col-12">
+						<label for="cardholder-email">{{ _("Email") }}</label>
+						<input id="cardholder-email" disabled name="cardholder-email" class="form-control"
+							placeholder="{{ _('john@doe.com') }}" value="{{ payer_email }}" required />
+					</div>
+				</div>
+
+				<div class="form-row mb-3">
+					<div class="group col-12">
+						<label>{{ _("Card Details") }}</label>
+						<div id="card-element" class="form-control"></div>
+						<div id="card-errors" role="alert"></div>
+					</div>
+				</div>
+
+				<button type="submit" class="btn btn-primary btn-block" id="submit">{{ _('Pay') }} {{ amount
+					}}</button>
+
+				<div class="outcome text-center mt-3">
+					<div class="error text-danger" hidden>{{ _("An error occurred during the payment process. Please
+						contact us.") }}</div>
+					<div class="success text-success" hidden>{{ _("Your payment has been successfully registered.")
+						}}</div>
+				</div>
+			</form>
+		</div>
+
 	</div>
 </div>
 
