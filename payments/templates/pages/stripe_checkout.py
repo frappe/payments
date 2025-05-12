@@ -39,6 +39,18 @@ def get_context(context):
 		context.image = get_header_image(context.reference_docname, gateway_controller)
 
 		context["amount"] = fmt_money(amount=context["amount"], currency=context["currency"])
+		# query for sales invoice PO number
+		payment_request = frappe.get_doc(
+			context.reference_doctype, context.reference_docname)
+		if payment_request and payment_request.reference_doctype == "Sales Invoice":
+			# Fetch the PO number related to the Sales Invoice (if any)
+			po_number = frappe.db.get_value(
+				payment_request.reference_doctype,
+				payment_request.reference_name,
+				"po_no"
+			)
+			if po_number:
+				context["po_number"] = po_number  # Add PO number to context
 
 		if is_a_subscription(context.reference_doctype, context.reference_docname):
 			payment_plan = frappe.db.get_value(

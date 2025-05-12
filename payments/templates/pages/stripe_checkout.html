@@ -14,16 +14,20 @@
 <div class="container mt-5">
 	<div class="row justify-content-center">
 		<div class="col-lg-8 col-md-10 col-sm-12">
-			<div class="card shadow-sm p-4">
-				{% if image %}
-				<div class="text-center mb-4">
-					<img src="{{image}}" alt="Payment Image" class="img-fluid">
-				</div>
-				{% endif %}
-
-				<h2 class="text-center mb-4">{{ description }}</h2>
+		
+			{% if image %}
+			<div class="text-center mb-4">
+				<img src="{{image}}" alt="Payment Image" class="img-fluid">
 			</div>
+			{% endif %}
 
+			<h2 class="text-center mb-4">{{ description }}</h2>
+			<h4 class="text-center mb-4">{{ _('Outstanding') }} {{ amount}}</h4>
+			{% if po_number %}
+			<div class="mb-4">
+				<h4>Purchase Order (PO): <strong>{{ po_number }}</strong></h4>
+			</div>
+			{% endif %}
 			<form id="payment-form">
 				<div class="form-row mb-3">
 					<div class="group col-12">
