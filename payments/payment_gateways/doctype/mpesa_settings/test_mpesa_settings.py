@@ -83,6 +83,7 @@ class TestMpesaSettings(unittest.TestCase):
 		integration_request.delete()
 
 	def test_processing_of_callback_payload(self):
+		frappe.db.set_single_value("POS Settings", "invoice_type", "POS Invoice")
 		mpesa_account = frappe.db.get_value(
 			"Payment Gateway Account", {"payment_gateway": "Mpesa-Payment"}, "payment_account"
 		)
@@ -144,6 +145,7 @@ class TestMpesaSettings(unittest.TestCase):
 		pos_invoice.delete()
 
 	def test_processing_of_multiple_callback_payload(self):
+		frappe.db.set_single_value("POS Settings", "invoice_type", "POS Invoice")
 		mpesa_account = frappe.db.get_value(
 			"Payment Gateway Account", {"payment_gateway": "Mpesa-Payment"}, "payment_account"
 		)
@@ -214,6 +216,7 @@ class TestMpesaSettings(unittest.TestCase):
 		pos_invoice.delete()
 
 	def test_processing_of_only_one_succes_callback_payload(self):
+		frappe.db.set_single_value("POS Settings", "invoice_type", "POS Invoice")
 		mpesa_account = frappe.db.get_value(
 			"Payment Gateway Account", {"payment_gateway": "Mpesa-Payment"}, "payment_account"
 		)
