@@ -99,3 +99,19 @@
 .field:-ms-input-placeholder {
   color: #CFD7E0;
 }
+
+#payment-section {
+  min-height: 50vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  padding: 10rem;
+}
+
+@media (max-width: 48rem) {
+  #payment-section {
+    padding: 0rem;
+    min-height: 70vh;
+  },
+}
