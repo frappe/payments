@@ -325,17 +325,20 @@ class RazorpaySettings(Document):
 		return kwargs
 
 	def get_payment_url(self, **kwargs):
+		order = self.create_order(create_integration_request=False, **kwargs)
+		kwargs["order_id"] = order["id"]
 		integration_request = create_request_log(kwargs, service_name="Razorpay")
 		return get_url(f"./razorpay_checkout?token={integration_request.name}")
 
-	def create_order(self, **kwargs):
+	def create_order(self, create_integration_request=True, **kwargs):
 		# Creating Orders https://razorpay.com/docs/api/orders/
 
 		# convert rupees to paisa
 		kwargs["amount"] = int(kwargs["amount"] * 100)
 
 		# Create integration log
-		integration_request = create_request_log(kwargs, service_name="Razorpay")
+		if create_integration_request:
+			integration_request = create_request_log(kwargs, service_name="Razorpay")
 
 		# Setup payment options
 		payment_options = {
@@ -353,8 +356,10 @@ class RazorpaySettings(Document):
 						self.get_password(fieldname="api_secret", raise_exception=False),
 					),
 					data=payment_options,
+					headers={"content-type": "application/json"},
 				)
-				order["integration_request"] = integration_request.name
+				if create_integration_request:
+					order["integration_request"] = integration_request.name
 				return order  # Order returned to be consumed by razorpay.js
 			except Exception:
 				frappe.log(frappe.get_traceback())
