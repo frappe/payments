@@ -73,7 +73,7 @@ from frappe.integrations.utils import (
 	make_post_request,
 )
 from frappe.model.document import Document
-from frappe.utils import call_hook_method, cint, get_timestamp, get_url
+from frappe.utils import call_hook_method, cint, get_timestamp, get_url, flt
 
 from payments.utils import create_payment_gateway
 
@@ -334,7 +334,7 @@ class RazorpaySettings(Document):
 		# Creating Orders https://razorpay.com/docs/api/orders/
 
 		# convert rupees to paisa
-		kwargs["amount"] *= 100
+		kwargs["amount"] = int(kwargs.get('amount')) * 100
 
 		# Create integration log
 		if create_integration_request:
@@ -342,7 +342,7 @@ class RazorpaySettings(Document):
 
 		# Setup payment options
 		payment_options = {
-			"amount": kwargs.get("amount"),
+			"amount": flt(kwargs.get('amount'), precision=0),
 			"currency": kwargs.get("currency", "INR"),
 			"receipt": kwargs.get("receipt"),
 			"payment_capture": kwargs.get("payment_capture"),
