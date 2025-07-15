@@ -112,6 +112,9 @@ override_doctype_class = {"Web Form": "payments.overrides.payment_webform.Paymen
 # ---------------
 
 scheduler_events = {
+	"hourly": [
+        "payments.payment_gateways.doctype.razorpay_settings.razorpay_settings.verify_pending_payments",
+	],
 	"all": [
 		"payments.payment_gateways.doctype.razorpay_settings.razorpay_settings.capture_payment",
 	],

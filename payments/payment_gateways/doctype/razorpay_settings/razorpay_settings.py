@@ -553,6 +553,47 @@ def capture_payment(is_sandbox=False, sanbox_response=None):
 			doc.save()
 			frappe.log_error(doc.error, f"{doc.name} Failed")
 
+def verify_pending_payments(is_sandbox=False, sanbox_response=None):
+	"""
+	Checks for the pending payments being authorised at Razorpay End but in Frappe
+	After Successful Payment, the razorpay_checkout.js handles the Razorpay response
+	If User closes the browser before the payment is completed, then payment is not authorised in Frappe
+
+	"""
+	controller = frappe.get_doc("Razorpay Settings")
+	for doc in frappe.get_all(
+		"Integration Request",
+		filters={"status": "Queued", "integration_request_service": "Razorpay"}
+	):
+		try:
+			if is_sandbox:
+				resp = sanbox_response
+			else:
+				doc = frappe.get_doc("Integration Request", doc.name)
+				data = json.loads(doc.data)
+				settings = controller.get_settings(data)
+				resp = make_get_request(
+					"https://api.razorpay.com/v1/orders/{0}/payments".format(data.get("order_id")),
+					auth=(settings.api_key, settings.api_secret),
+				)
+				if resp:
+					resp.update({"razorpay_payment_id": resp.get("id")})
+					if resp.get("status") == "authorized":
+						doc.update_status(resp, 'Authorized')
+						status_changed_to = "Authorized"
+					
+					if resp.get("status") == "captured":
+						doc.update_status(resp, 'Completed')
+						status_changed_to = "Completed"
+					
+					if status_changed_to in ("Authorized", "Verified", "Completed"):
+						if doc.reference_doctype and doc.reference_docname:
+							frappe.get_doc(
+								doc.reference_doctype, doc.reference_docname
+								).run_method("on_payment_authorized", status_changed_to)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), f"{doc.name} Failed")
+
 
 @frappe.whitelist(allow_guest=True)
 def get_api_key():
