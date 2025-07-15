@@ -334,7 +334,7 @@ class RazorpaySettings(Document):
 		# Creating Orders https://razorpay.com/docs/api/orders/
 
 		# convert rupees to paisa
-		kwargs["amount"] = int(kwargs["amount"] * 100)
+		kwargs["amount"] *= 100
 
 		# Create integration log
 		if create_integration_request:
@@ -355,7 +355,7 @@ class RazorpaySettings(Document):
 						self.api_key,
 						self.get_password(fieldname="api_secret", raise_exception=False),
 					),
-					data=payment_options,
+					data=json.dumps(payment_options),
 					headers={"content-type": "application/json"},
 				)
 				if create_integration_request:
