@@ -6,6 +6,7 @@ $(document).ready(function(){
 			"currency": "{{ currency }}",
 			"name": "{{ title }}",
 			"description": "{{ description }}",
+			"order_id": "{{ order_id }}",
 			"subscription_id": "{{ subscription_id }}",
 			"handler": function (response){
 				razorpay.make_payment_log(response, options, "{{ reference_doctype }}", "{{ reference_docname }}", "{{ token }}");
