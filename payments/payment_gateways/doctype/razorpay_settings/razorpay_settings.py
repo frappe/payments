@@ -572,10 +572,7 @@ def verify_pending_payments(is_sandbox=False, sanbox_response=None):
 				doc = frappe.get_doc("Integration Request", doc.name)
 				data = json.loads(doc.data)
 				settings = controller.get_settings(data)
-				resp = make_get_request(
-					"https://api.razorpay.com/v1/orders/{0}/payments".format(data.get("order_id")),
-					auth=(settings.api_key, settings.api_secret),
-				)
+				resp = check_razorpay_payment_status(data.get("order_id"), settings)
 				if resp:
 					status_changed_to = ""
 					resp.update({"razorpay_payment_id": resp.get("id")})
@@ -595,6 +592,19 @@ def verify_pending_payments(is_sandbox=False, sanbox_response=None):
 		except Exception:
 			frappe.log_error(frappe.get_traceback(), f"{doc.name} Failed")
 
+def check_razorpay_payment_status(order_id, settings):
+	try:
+
+		resp = make_get_request("https://api.razorpay.com/v1/orders/{0}/payments"
+			.format(order_id), auth=(settings.api_key,
+				settings.get_password(fieldname="api_secret", raise_exception=False)))
+
+		if len(resp.get("items")) != 0:
+			for i in resp.get("items"):
+				if i.get("status") in ("authorized", "captured"):
+					return i
+	except Exception:
+		frappe.log_error(frappe.get_traceback())
 
 @frappe.whitelist(allow_guest=True)
 def get_api_key():
