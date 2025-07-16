@@ -577,6 +577,7 @@ def verify_pending_payments(is_sandbox=False, sanbox_response=None):
 					auth=(settings.api_key, settings.api_secret),
 				)
 				if resp:
+					status_changed_to = ""
 					resp.update({"razorpay_payment_id": resp.get("id")})
 					if resp.get("status") == "authorized":
 						doc.update_status(resp, 'Authorized')
@@ -586,7 +587,7 @@ def verify_pending_payments(is_sandbox=False, sanbox_response=None):
 						doc.update_status(resp, 'Completed')
 						status_changed_to = "Completed"
 					
-					if status_changed_to in ("Authorized", "Verified", "Completed"):
+					if status_changed_to in ("Authorized", "Completed"):
 						if doc.reference_doctype and doc.reference_docname:
 							frappe.get_doc(
 								doc.reference_doctype, doc.reference_docname
