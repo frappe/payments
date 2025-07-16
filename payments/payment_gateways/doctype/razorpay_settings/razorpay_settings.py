@@ -73,7 +73,7 @@ from frappe.integrations.utils import (
 	make_post_request,
 )
 from frappe.model.document import Document
-from frappe.utils import call_hook_method, cint, get_timestamp, get_url
+from frappe.utils import call_hook_method, cint, get_timestamp, get_url, flt
 
 from payments.utils import create_payment_gateway
 
@@ -325,21 +325,24 @@ class RazorpaySettings(Document):
 		return kwargs
 
 	def get_payment_url(self, **kwargs):
+		order = self.create_order(create_integration_request=False, **kwargs)
+		kwargs["order_id"] = order["id"]
 		integration_request = create_request_log(kwargs, service_name="Razorpay")
 		return get_url(f"./razorpay_checkout?token={integration_request.name}")
 
-	def create_order(self, **kwargs):
+	def create_order(self, create_integration_request=True, **kwargs):
 		# Creating Orders https://razorpay.com/docs/api/orders/
 
 		# convert rupees to paisa
-		kwargs["amount"] = int(kwargs["amount"] * 100)
+		kwargs["amount"] = int(kwargs.get('amount')) * 100
 
 		# Create integration log
-		integration_request = create_request_log(kwargs, service_name="Razorpay")
+		if create_integration_request:
+			integration_request = create_request_log(kwargs, service_name="Razorpay")
 
 		# Setup payment options
 		payment_options = {
-			"amount": kwargs.get("amount"),
+			"amount": flt(kwargs.get('amount'), precision=0),
 			"currency": kwargs.get("currency", "INR"),
 			"receipt": kwargs.get("receipt"),
 			"payment_capture": kwargs.get("payment_capture"),
@@ -352,9 +355,11 @@ class RazorpaySettings(Document):
 						self.api_key,
 						self.get_password(fieldname="api_secret", raise_exception=False),
 					),
-					data=payment_options,
+					data=json.dumps(payment_options),
+					headers={"content-type": "application/json"},
 				)
-				order["integration_request"] = integration_request.name
+				if create_integration_request:
+					order["integration_request"] = integration_request.name
 				return order  # Order returned to be consumed by razorpay.js
 			except Exception:
 				frappe.log(frappe.get_traceback())
@@ -548,6 +553,58 @@ def capture_payment(is_sandbox=False, sanbox_response=None):
 			doc.save()
 			frappe.log_error(doc.error, f"{doc.name} Failed")
 
+def verify_pending_payments(is_sandbox=False, sanbox_response=None):
+	"""
+	Checks for the pending payments being authorised at Razorpay End but in Frappe
+	After Successful Payment, the razorpay_checkout.js handles the Razorpay response
+	If User closes the browser before the payment is completed, then payment is not authorised in Frappe
+
+	"""
+	controller = frappe.get_doc("Razorpay Settings")
+	for doc in frappe.get_all(
+		"Integration Request",
+		filters={"status": "Queued", "integration_request_service": "Razorpay"}
+	):
+		try:
+			if is_sandbox:
+				resp = sanbox_response
+			else:
+				doc = frappe.get_doc("Integration Request", doc.name)
+				data = json.loads(doc.data)
+				settings = controller.get_settings(data)
+				payment_details = check_razorpay_payment_status(data.get("order_id"), settings)
+				if payment_details:
+					status_changed_to = ""
+					payment_details.update({"razorpay_payment_id": payment_details.get("id")})
+					if payment_details.get("status") == "authorized":
+						doc.update_status(payment_details, 'Authorized')
+						status_changed_to = "Authorized"
+					
+					if payment_details.get("status") == "captured":
+						doc.update_status(payment_details, 'Completed')
+						status_changed_to = "Completed"
+					
+					if status_changed_to in ("Authorized", "Completed"):
+						if doc.reference_doctype and doc.reference_docname:
+							frappe.get_doc(
+								doc.reference_doctype, doc.reference_docname
+								).run_method("on_payment_authorized", status_changed_to)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), f"{doc.name} Failed")
+
+def check_razorpay_payment_status(order_id, settings):
+	try:
+
+		resp = make_get_request(
+			"https://api.razorpay.com/v1/orders/{0}/payments".format(order_id),
+			auth=(settings.api_key, settings.api_secret),
+		)
+		if len(resp.get("items")):
+			for i in resp.get("items"):
+				if i.get("status") in ("authorized", "captured"):
+					return i
+	except Exception:
+		frappe.log_error(frappe.get_traceback())
 
 @frappe.whitelist(allow_guest=True)
 def get_api_key():
