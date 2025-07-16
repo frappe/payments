@@ -572,16 +572,16 @@ def verify_pending_payments(is_sandbox=False, sanbox_response=None):
 				doc = frappe.get_doc("Integration Request", doc.name)
 				data = json.loads(doc.data)
 				settings = controller.get_settings(data)
-				resp = check_razorpay_payment_status(data.get("order_id"), settings)
-				if resp:
+				payment_details = check_razorpay_payment_status(data.get("order_id"), settings)
+				if payment_details:
 					status_changed_to = ""
-					resp.update({"razorpay_payment_id": resp.get("id")})
-					if resp.get("status") == "authorized":
-						doc.update_status(resp, 'Authorized')
+					payment_details.update({"razorpay_payment_id": payment_details.get("id")})
+					if payment_details.get("status") == "authorized":
+						doc.update_status(payment_details, 'Authorized')
 						status_changed_to = "Authorized"
 					
-					if resp.get("status") == "captured":
-						doc.update_status(resp, 'Completed')
+					if payment_details.get("status") == "captured":
+						doc.update_status(payment_details, 'Completed')
 						status_changed_to = "Completed"
 					
 					if status_changed_to in ("Authorized", "Completed"):
@@ -595,11 +595,11 @@ def verify_pending_payments(is_sandbox=False, sanbox_response=None):
 def check_razorpay_payment_status(order_id, settings):
 	try:
 
-		resp = make_get_request("https://api.razorpay.com/v1/orders/{0}/payments"
-			.format(order_id), auth=(settings.api_key,
-				settings.get_password(fieldname="api_secret", raise_exception=False)))
-
-		if len(resp.get("items")) != 0:
+		resp = make_get_request(
+			"https://api.razorpay.com/v1/orders/{0}/payments".format(order_id),
+			auth=(settings.api_key, settings.api_secret),
+		)
+		if len(resp.get("items")):
 			for i in resp.get("items"):
 				if i.get("status") in ("authorized", "captured"):
 					return i
