@@ -325,6 +325,10 @@ class RazorpaySettings(Document):
 		return kwargs
 
 	def get_payment_url(self, **kwargs):
+		if not kwargs.get("order_id"):
+			order = self.create_order(**kwargs)
+			kwargs.update({"order_id": order.get("id")})
+
 		integration_request = create_request_log(kwargs, service_name="Razorpay")
 		return get_url(f"./razorpay_checkout?token={integration_request.name}")
 
