@@ -44,8 +44,8 @@ class MpesaSettings(Document):
 		)
 
 		# required to fetch the bank account details from the payment gateway account
-		frappe.db.commit()  # nosemgrep
 		create_mode_of_payment("Mpesa-" + self.payment_gateway_name, payment_type="Phone")
+		frappe.db.commit()  # nosemgrep
 
 	def request_for_payment(self, **kwargs):
 		args = frappe._dict(kwargs)
