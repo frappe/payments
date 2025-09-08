@@ -1,0 +1,10 @@
+{
+  "doctype": "Pesapal Settings",
+  "consumer_key": "your_consumer_key_here",
+  "consumer_secret": "your_consumer_secret_here",
+  "is_sandbox": 1,
+  "ipn_notification_type": "POST",
+  "redirect_to": "https://yoursite.com/payment-success",
+  "ipn_url": "https://yoursite.com/api/method/payments.payment_gateways.doctype.pesapal_settings.pesapal_settings.handle_ipn",
+  "ipn_id": ""
+}

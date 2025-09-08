@@ -128,6 +128,12 @@ before_tests = "erpnext.setup.utils.before_tests"  # To setup company and accoun
 override_whitelisted_methods = {
 	"frappe.website.doctype.web_form.web_form.accept": "payments.overrides.payment_webform.accept"
 }
+
+# Pesapal webhook endpoints
+website_route_rules = [
+	{"from_route": "/api/method/payments.payment_gateways.doctype.pesapal_settings.pesapal_settings.handle_ipn", "to_route": "payments.payment_gateways.doctype.pesapal_settings.pesapal_settings.handle_ipn"},
+	{"from_route": "/api/method/payments.payment_gateways.doctype.pesapal_settings.pesapal_settings.handle_callback", "to_route": "payments.payment_gateways.doctype.pesapal_settings.pesapal_settings.handle_callback"},
+]
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,

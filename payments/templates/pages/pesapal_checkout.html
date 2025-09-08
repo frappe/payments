@@ -1,0 +1,41 @@
+{% extends "templates/web.html" %}
+
+{% block title %} Payment {% endblock %}
+
+{%- block header -%}{% endblock %}
+
+{% block script %}
+<script>{% include "templates/includes/pesapal_checkout.js" %}</script>
+{% endblock %}
+
+{%- block page_content -%}
+
+<p class='lead text-center centered'>
+	<span class='pesapal-loading'>Redirecting to Pesapal Payment Gateway...</span>
+	<span class='pesapal-confirming hidden'>Processing Payment</span>
+</p>
+
+<div class="text-center">
+	<div class="spinner-border" role="status">
+		<span class="sr-only">Loading...</span>
+	</div>
+</div>
+
+{% endblock %}
+
+{% block style %}
+<style>
+	header, footer {
+		display: none;
+	}
+	
+	.pesapal-loading {
+		font-size: 18px;
+		color: #666;
+	}
+	
+	.spinner-border {
+		margin-top: 20px;
+	}
+</style>
+{% endblock %}
