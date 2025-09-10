@@ -437,7 +437,6 @@ def get_payment_status(payment_request):
 			parsed_response["enc_response"], bankmuscat_settings.get_password("working_key")
 		)
 		decrypted_json = json.loads(decrypted_data)
-
 		# Payment status handling
 		return handle_payment_response(decrypted_json, "Payment Request", payment_request)
 
