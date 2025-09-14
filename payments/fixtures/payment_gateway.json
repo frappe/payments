@@ -1,12 +1,12 @@
 [
- {
-  "docstatus": 0,
-  "doctype": "Payment Gateway",
-  "gateway": "Pesapal",
-  "gateway_controller": "payments.payment_gateways.doctype.pesapal_settings.pesapal_settings.PesapalSettings",
-  "gateway_settings": "Pesapal Settings",
-  "is_default": 0,
-  "label": "Pesapal",
-  "name": "Pesapal"
- }
+    {
+        "docstatus": 0,
+        "doctype": "Payment Gateway",
+        "gateway": "Pesapal",
+        "gateway_controller": "Pesapal Settings",
+        "gateway_settings": "Pesapal Settings",
+        "is_default": 0,
+        "label": "Pesapal",
+        "name": "Pesapal"
+    }
 ]

@@ -1,0 +1,10 @@
+[
+    {
+        "docstatus": 0,
+        "doctype": "Mode of Payment",
+        "enabled": 1,
+        "mode_of_payment": "Pesapal",
+        "name": "Pesapal",
+        "type": "General"
+    }
+]

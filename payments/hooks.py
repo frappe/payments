@@ -72,6 +72,14 @@ after_install = "payments.utils.make_custom_fields"
 before_uninstall = "payments.utils.delete_custom_fields"
 # after_uninstall = "pay.uninstall.after_uninstall"
 
+# Fixtures
+# --------
+
+fixtures = [
+	"Payment Gateway",
+	"Mode of Payment"
+]
+
 # Desk Notifications
 # ------------------
 # See frappe.core.notifications.get_notification_config
