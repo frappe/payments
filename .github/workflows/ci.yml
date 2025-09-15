@@ -30,12 +30,9 @@ jobs:
     steps:
       - name: Clone
         uses: actions/checkout@v4
-<<<<<<< HEAD
 
       - name: Install MariaDB Client
         run: sudo apt-get -y install mariadb-client
-=======
->>>>>>> bbcde03 (ci: bump github actions to supported versions (#169))
 
       - name: Setup Python
         uses: actions/setup-python@v5
