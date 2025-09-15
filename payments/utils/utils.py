@@ -162,26 +162,33 @@ def make_custom_fields():
 
 
 def delete_custom_fields():
-	if frappe.get_meta("Web Form").has_field("payments_tab"):
-		click.secho("* Uninstalling Payment Custom Fields from Web Form")
+	if not frappe.get_meta("Web Form").has_field("payments_tab"):
+		return
 
-		fieldnames = (
-			"payments_tab",
-			"accept_payment",
-			"payment_gateway",
-			"payment_button_label",
-			"payment_button_help",
-			"payments_cb",
-			"amount_field",
-			"amount_based_on_field",
-			"amount",
-			"currency",
-		)
+	click.secho("* Uninstalling Payment Custom Fields from Web Form")
+	frappe.db.delete(
+		"Custom Field",
+		{
+			"dt": "Web Form",
+			"fieldname": (
+				"in",
+				(
+					"payments_tab",
+					"accept_payment",
+					"payment_gateway",
+					"payment_button_label",
+					"payment_button_help",
+					"payments_cb",
+					"amount_field",
+					"amount_based_on_field",
+					"amount",
+					"currency",
+				),
+			),
+		},
+	)
 
-		for fieldname in fieldnames:
-			frappe.db.delete("Custom Field", {"name": "Web Form-" + fieldname})
-
-		frappe.clear_cache(doctype="Web Form")
+	frappe.clear_cache(doctype="Web Form")
 
 
 def before_install():
