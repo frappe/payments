@@ -119,10 +119,8 @@ class MpesaConnector:
 		        errorMessage(str): This is a predefined code that indicates the reason for request failure.
 		"""
 
-		time = (
-			str(datetime.datetime.now()).split(".")[0].replace("-", "").replace(" ", "").replace(":", "")
-		)
-		password = f"{str(business_shortcode)}{str(passcode)}{time}"
+		time = str(datetime.datetime.now()).split(".")[0].replace("-", "").replace(" ", "").replace(":", "")
+		password = f"{business_shortcode!s}{passcode!s}{time}"
 		encoded = base64.b64encode(bytes(password, encoding="utf8"))
 		payload = {
 			"BusinessShortCode": business_shortcode,
@@ -135,9 +133,7 @@ class MpesaConnector:
 			"CallBackURL": callback_url,
 			"AccountReference": reference_code,
 			"TransactionDesc": description,
-			"TransactionType": "CustomerPayBillOnline"
-			if self.env == "sandbox"
-			else "CustomerBuyGoodsOnline",
+			"TransactionType": "CustomerPayBillOnline" if self.env == "sandbox" else "CustomerBuyGoodsOnline",
 		}
 		headers = {
 			"Authorization": f"Bearer {self.authentication_token}",

@@ -7,7 +7,6 @@ no_cache = True
 
 
 def get_context(context):
-	token = frappe.local.form_dict.token
 	doc = frappe.get_doc(frappe.local.form_dict.doctype, frappe.local.form_dict.docname)
 
 	context.payment_message = ""

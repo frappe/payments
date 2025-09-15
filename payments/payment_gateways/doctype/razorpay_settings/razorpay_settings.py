@@ -79,7 +79,138 @@ from payments.utils import create_payment_gateway
 
 
 class RazorpaySettings(Document):
-	supported_currencies = ["INR"]
+	supported_currencies = (
+		"AED",
+		"ALL",
+		"AMD",
+		"ARS",
+		"AUD",
+		"AWG",
+		"AZN",
+		"BAM",
+		"BBD",
+		"BDT",
+		"BGN",
+		"BHD",
+		"BIF",
+		"BMD",
+		"BND",
+		"BOB",
+		"BRL",
+		"BSD",
+		"BTN",
+		"BWP",
+		"BZD",
+		"CAD",
+		"CHF",
+		"CLP",
+		"CNY",
+		"COP",
+		"CRC",
+		"CUP",
+		"CVE",
+		"CZK",
+		"DJF",
+		"DKK",
+		"DOP",
+		"DZD",
+		"EGP",
+		"ETB",
+		"EUR",
+		"FJD",
+		"GBP",
+		"GHS",
+		"GIP",
+		"GMD",
+		"GNF",
+		"GTQ",
+		"GYD",
+		"HKD",
+		"HNL",
+		"HRK",
+		"HTG",
+		"HUF",
+		"IDR",
+		"ILS",
+		"INR",
+		"IQD",
+		"ISK",
+		"JMD",
+		"JOD",
+		"JPY",
+		"KES",
+		"KGS",
+		"KHR",
+		"KMF",
+		"KRW",
+		"KWD",
+		"KYD",
+		"KZT",
+		"LAK",
+		"LKR",
+		"LRD",
+		"LSL",
+		"MAD",
+		"MDL",
+		"MGA",
+		"MKD",
+		"MMK",
+		"MNT",
+		"MOP",
+		"MUR",
+		"MVR",
+		"MWK",
+		"MXN",
+		"MYR",
+		"MZN",
+		"NAD",
+		"NGN",
+		"NIO",
+		"NOK",
+		"NPR",
+		"NZD",
+		"OMR",
+		"PEN",
+		"PGK",
+		"PHP",
+		"PKR",
+		"PLN",
+		"PYG",
+		"QAR",
+		"RON",
+		"RSD",
+		"RUB",
+		"RWF",
+		"SAR",
+		"SCR",
+		"SEK",
+		"SGD",
+		"SLL",
+		"SOS",
+		"SSP",
+		"SVC",
+		"SZL",
+		"THB",
+		"TND",
+		"TRY",
+		"TTD",
+		"TWD",
+		"TZS",
+		"UAH",
+		"UGX",
+		"USD",
+		"UYU",
+		"UZS",
+		"VND",
+		"VUV",
+		"XAF",
+		"XCD",
+		"XOF",
+		"XPF",
+		"YER",
+		"ZAR",
+		"ZMW",
+	)
 
 	def init_client(self):
 		if self.api_key:
@@ -194,6 +325,10 @@ class RazorpaySettings(Document):
 		return kwargs
 
 	def get_payment_url(self, **kwargs):
+		if not kwargs.get("order_id"):
+			order = self.create_order(**kwargs)
+			kwargs.update({"order_id": order.get("id")})
+
 		integration_request = create_request_log(kwargs, service_name="Razorpay")
 		return get_url(f"./razorpay_checkout?token={integration_request.name}")
 
@@ -201,7 +336,7 @@ class RazorpaySettings(Document):
 		# Creating Orders https://razorpay.com/docs/api/orders/
 
 		# convert rupees to paisa
-		kwargs["amount"] *= 100
+		kwargs["amount"] = int(kwargs["amount"] * 100)
 
 		# Create integration log
 		integration_request = create_request_log(kwargs, service_name="Razorpay")
@@ -251,8 +386,8 @@ class RazorpaySettings(Document):
 
 	def authorize_payment(self):
 		"""
-		An authorization is performed when user’s payment details are successfully authenticated by the bank.
-		The money is deducted from the customer’s account, but will not be transferred to the merchant’s account
+		An authorization is performed when user's payment details are successfully authenticated by the bank.
+		The money is deducted from the customer's account, but will not be transferred to the merchant's account
 		until it is explicitly captured by merchant.
 		"""
 		data = json.loads(self.integration_request.data)
@@ -306,8 +441,8 @@ class RazorpaySettings(Document):
 				if custom_redirect_to:
 					redirect_to = custom_redirect_to
 
-			redirect_url = "payment-success?doctype={}&docname={}".format(
-				self.data.reference_doctype, self.data.reference_docname
+			redirect_url = (
+				f"payment-success?doctype={self.data.reference_doctype}&docname={self.data.reference_docname}"
 			)
 		else:
 			redirect_url = "payment-failed"
@@ -341,7 +476,7 @@ class RazorpaySettings(Document):
 		settings = self.get_settings({})
 
 		try:
-			resp = make_post_request(
+			make_post_request(
 				f"https://api.razorpay.com/v1/subscriptions/{subscription_id}/cancel",
 				auth=(settings.api_key, settings.api_secret),
 			)
@@ -361,6 +496,13 @@ class RazorpaySettings(Document):
 			frappe.throw(_("Razorpay Signature Verification Failed"), exc=frappe.PermissionError)
 
 		return result
+
+	@frappe.whitelist()
+	def clear(self):
+		self.api_key = self.api_secret = None
+		self.redirect_url = None
+		self.flags.ignore_mandatory = True
+		self.save()
 
 
 def capture_payment(is_sandbox=False, sanbox_response=None):
@@ -393,7 +535,9 @@ def capture_payment(is_sandbox=False, sanbox_response=None):
 
 				if resp.get("status") == "authorized":
 					resp = make_post_request(
-						"https://api.razorpay.com/v1/payments/{}/capture".format(data.get("razorpay_payment_id")),
+						"https://api.razorpay.com/v1/payments/{}/capture".format(
+							data.get("razorpay_payment_id")
+						),
 						auth=(settings.api_key, settings.api_secret),
 						data={"amount": data.get("amount")},
 					)

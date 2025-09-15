@@ -40,9 +40,7 @@ def get_context(context):
 		context["amount"] = flt(context["amount"])
 
 		gateway_controller = get_gateway_controller(context.reference_docname)
-		context["header_img"] = frappe.db.get_value(
-			"Braintree Settings", gateway_controller, "header_img"
-		)
+		context["header_img"] = frappe.db.get_value("Braintree Settings", gateway_controller, "header_img")
 
 	else:
 		frappe.redirect_to_message(

@@ -39,7 +39,8 @@ function setOutcome(result) {
 				"stripe_token_id": result.token.id,
 				"data": JSON.stringify({{ frappe.form_dict|json }}),
 				"reference_doctype": "{{ reference_doctype }}",
-				"reference_docname": "{{ reference_docname }}"
+				"reference_docname": "{{ reference_docname }}",
+				"payment_gateway": "{{ payment_gateway }}"
 			},
 			callback: function(r) {
 				if (r.message.status == "Completed") {

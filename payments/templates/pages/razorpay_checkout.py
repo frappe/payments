@@ -6,6 +6,8 @@ import frappe
 from frappe import _
 from frappe.utils import cint, flt
 
+from payments.utils.utils import validate_integration_request
+
 no_cache = 1
 
 expected_keys = (
@@ -26,7 +28,10 @@ def get_context(context):
 	context.api_key = get_api_key()
 
 	try:
+		validate_integration_request(frappe.form_dict["token"])
+
 		doc = frappe.get_doc("Integration Request", frappe.form_dict["token"])
+
 		payment_details = json.loads(doc.data)
 
 		for key in expected_keys:
@@ -38,7 +43,7 @@ def get_context(context):
 			payment_details["subscription_id"] if payment_details.get("subscription_id") else ""
 		)
 
-	except Exception as e:
+	except Exception:
 		frappe.redirect_to_message(
 			_("Invalid Token"),
 			_("Seems token you are using is invalid!"),
