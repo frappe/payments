@@ -87,7 +87,7 @@ def accept(web_form, data, docname=None, for_payment=False):
 		value = data.get(fieldname, None)
 
 		if df and df.fieldtype in ("Attach", "Attach Image"):
-			if value and "data:" and "base64" in value:
+			if value and "data:" in value and "base64" in value:
 				files.append((fieldname, value))
 				if not doc.name:
 					doc.set(fieldname, "")
