@@ -143,7 +143,7 @@ def generate_stk_push(**kwargs):
 
 		mobile_number = sanitize_mobile_number(args.sender)
 
-		response = connector.stk_push(
+		return connector.stk_push(
 			business_shortcode=business_shortcode,
 			amount=args.request_amount,
 			passcode=mpesa_settings.get_password("online_passkey"),
@@ -152,9 +152,6 @@ def generate_stk_push(**kwargs):
 			phone_number=mobile_number,
 			description="POS Payment",
 		)
-
-		return response
-
 	except Exception:
 		frappe.log_error("Mpesa Express Transaction Error")
 		frappe.throw(
@@ -268,7 +265,7 @@ def get_account_balance(request_payload):
 			+ "/api/method/payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.process_balance_info"
 		)
 
-		response = connector.get_balance(
+		return connector.get_balance(
 			mpesa_settings.initiator_name,
 			mpesa_settings.security_credential,
 			mpesa_settings.till_number,
@@ -277,7 +274,6 @@ def get_account_balance(request_payload):
 			callback_url,
 			callback_url,
 		)
-		return response
 	except Exception:
 		frappe.log_error("Mpesa: Failed to get account balance")
 		frappe.throw(_("Please check your configuration and try again"), title=_("Error"))
