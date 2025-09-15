@@ -66,9 +66,7 @@ def get_api_key(doc, gateway_controller):
 
 
 def get_header_image(doc, gateway_controller):
-	header_image = frappe.db.get_value("Stripe Settings", gateway_controller, "header_img")
-
-	return header_image
+	return frappe.db.get_value("Stripe Settings", gateway_controller, "header_img")
 
 
 @frappe.whitelist(allow_guest=True)
