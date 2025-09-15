@@ -30,6 +30,9 @@ app_license = "MIT"
 
 # include js in doctype views
 # doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {
+	"Payment Request": "public/js/payment_request.js",
+}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -100,13 +103,16 @@ override_doctype_class = {"Web Form": "payments.overrides.payment_webform.Paymen
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	# "*": {
+	# 	"on_update": "method",
+	# 	"on_cancel": "method",
+	# 	"on_trash": "method"
+	# }
+	"Payment Request": {
+		"on_submit": "payments.payment_gateways.doctype.bankmuscat_settings.bankmuscat_settings.store_custom_name",
+	}
+}
 
 # Scheduled Tasks
 # ---------------
@@ -114,6 +120,9 @@ override_doctype_class = {"Web Form": "payments.overrides.payment_webform.Paymen
 scheduler_events = {
 	"all": [
 		"payments.payment_gateways.doctype.razorpay_settings.razorpay_settings.capture_payment",
+	],
+	"daily": [
+		"payments.templates.pages.bankmuscat_checkout.check_payment_status",
 	],
 }
 
