@@ -204,7 +204,9 @@ class GoCardlessSettings(Document):
 
 def get_gateway_controller(doc):
 	payment_request = frappe.get_doc("Payment Request", doc)
-	return frappe.db.get_value("Payment Gateway", payment_request.payment_gateway, "gateway_controller")
+	return frappe.db.get_value(
+		"Payment Gateway", payment_request.payment_gateway, "gateway_controller"
+	)
 
 
 def gocardless_initialization(doc):
