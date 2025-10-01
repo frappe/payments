@@ -11,7 +11,7 @@ from payments.utils import create_payment_gateway
 
 
 class BankMuscatSettings(Document):
-	supported_currencies = ("OMR", "AED", "USD", "GBP", "EUR", "INR")
+	supported_currencies = ("OMR", "AED", "USD", "GBP", "EUR")
 
 	# Create Payment Gateway on save
 	def on_update(self):
