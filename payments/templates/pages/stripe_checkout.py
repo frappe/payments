@@ -41,13 +41,20 @@ def get_context(context):
 
 		context["amount"] = fmt_money(amount=context["amount"], currency=context["currency"])
 
-		if is_a_subscription(context.reference_doctype, context.reference_docname):
-			payment_plan = frappe.db.get_value(
-				context.reference_doctype, context.reference_docname, "payment_plan"
-			)
-			recurrence = frappe.db.get_value("Payment Plan", payment_plan, "recurrence")
+		# if is_a_subscription(context.reference_doctype, context.reference_docname):
+		# 	payment_plan = frappe.db.get_value(
+		# 		context.reference_doctype, context.reference_docname, "payment_plan"
+		# 	)
+		# 	recurrence = frappe.db.get_value("Payment Plan", payment_plan, "recurrence")
 
-			context["amount"] = context["amount"] + " " + _(recurrence)
+		# 	context["amount"] = context["amount"] + " " + _(recurrence)
+		if is_a_subscription(context.reference_doctype, context.reference_docname):
+			recurrence = frappe.db.get_value(
+				"Subscription Plan Detail",
+				{"parent": context.reference_docname},
+				"plan"
+			)
+			context["amount"] = f"{context['amount']} / {_(recurrence or 'subscription')}"
 
 	else:
 		frappe.log_error(
