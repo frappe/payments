@@ -49,7 +49,7 @@ def create_stripe_subscription(gateway_controller, data):
 def create_subscription_on_stripe(stripe_settings):
 	items = []
 	for payment_plan in stripe_settings.payment_plans:
-		plan = frappe.db.get_value("Subscription Plan", payment_plan.plan, "cost")
+		plan = frappe.db.get_value("Subscription Plan", payment_plan.plan, "product_price_id")
 		items.append({"price": plan, "quantity": payment_plan.qty})
 
 	try:
