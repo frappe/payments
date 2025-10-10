@@ -27,7 +27,7 @@ def cancel_stripe_subscription(subscription_doc):
                 frappe.throw(_("No Stripe Subscription ID found for this subscription"))
 
             # Cancel the subscription in Stripe
-            stripe.Subscription.delete(stripe_subscription_id)
+            stripe.Subscription.modify(stripe_subscription_id,cancel_at_period_end=True)
 
             # Update Integration Log
             stripe_settings.integration_request.db_set("status", "Completed", update_modified=False)
