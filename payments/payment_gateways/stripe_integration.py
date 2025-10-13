@@ -53,11 +53,20 @@ def create_subscription_on_stripe(stripe_settings):
 		items.append({"price": plan, "quantity": payment_plan.qty})
 
 	try:
-		customer = stripe.Customer.create(
-			source=stripe_settings.data.stripe_token_id,
-			description=stripe_settings.data.payer_name,
-			email=stripe_settings.data.payer_email,
-		)
+		payer_email = stripe_settings.data.payer_email
+		payer_name = stripe_settings.data.payer_name
+		token_id = stripe_settings.data.stripe_token_id
+		
+		existing_customers = stripe.Customer.list(email=payer_email, limit=1)
+		
+		if existing_customers.data and len(existing_customers.data) > 0:
+			customer = existing_customers.data[0]
+		else:
+			customer = stripe.Customer.create(
+				source=token_id,
+				description=payer_name,
+				email=payer_email,
+			)
 
 		subscription = stripe.Subscription.create(customer=customer, items=items)
 
