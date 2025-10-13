@@ -3,7 +3,7 @@ import frappe
 from frappe import _
 from frappe.integrations.utils import create_request_log
 
-def cancel_stripe_subscription(subscription_doc):
+def stripe_cancel_subscription(subscription_doc):
     """
     Cancel an active Stripe subscription from ERPNext Subscription Doc
     """
