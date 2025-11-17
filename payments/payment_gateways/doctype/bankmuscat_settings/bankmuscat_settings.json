@@ -1,56 +1,64 @@
 {
-    "actions": [],
-    "allow_rename": 1,
-    "autoname": "field:merchant_id",
-    "creation": "2025-01-16 14:46:37.045855",
-    "doctype": "DocType",
-    "engine": "InnoDB",
-    "field_order": [
-     "merchant_id",
-     "access_code",
-     "working_key"
-    ],
-    "fields": [
-     {
-      "fieldname": "merchant_id",
-      "fieldtype": "Data",
-      "label": "Merchant ID",
-      "unique": 1
-     },
-     {
-      "fieldname": "access_code",
-      "fieldtype": "Password",
-      "label": "Access Code"
-     },
-     {
-      "fieldname": "working_key",
-      "fieldtype": "Password",
-      "label": "Working Key"
-     }
-    ],
-    "index_web_pages_for_search": 1,
-    "links": [],
-    "modified": "2025-01-17 15:39:44.858467",
-    "modified_by": "Administrator",
-    "module": "Payment Gateways",
-    "name": "BankMuscat Settings",
-    "naming_rule": "By fieldname",
-    "owner": "Administrator",
-    "permissions": [
-     {
-      "create": 1,
-      "delete": 1,
-      "email": 1,
-      "export": 1,
-      "print": 1,
-      "read": 1,
-      "report": 1,
-      "role": "System Manager",
-      "share": 1,
-      "write": 1
-     }
-    ],
-    "sort_field": "modified",
-    "sort_order": "DESC",
-    "states": []
-   }
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:merchant_id",
+ "creation": "2025-01-16 14:46:37.045855",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "merchant_id",
+  "access_code",
+  "working_key",
+  "base_url"
+ ],
+ "fields": [
+  {
+   "fieldname": "merchant_id",
+   "fieldtype": "Data",
+   "label": "Merchant ID",
+   "unique": 1
+  },
+  {
+   "fieldname": "access_code",
+   "fieldtype": "Password",
+   "label": "Access Code"
+  },
+  {
+   "fieldname": "working_key",
+   "fieldtype": "Password",
+   "label": "Working Key"
+  },
+  {
+   "description": "https://{sandbox or prod domain}",
+   "fieldname": "base_url",
+   "fieldtype": "Data",
+   "label": "Base URL"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-11-04 14:32:40.445494",
+ "modified_by": "Administrator",
+ "module": "Payment Gateways",
+ "name": "BankMuscat Settings",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

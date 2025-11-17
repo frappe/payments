@@ -8,7 +8,7 @@
 		<span class='indicator red'>
 			{{ _("Payment Failed") }}</span>
 	</div>
-	<p>{{ _("Your payment has failed.") }}</p>
+	<p>{{ frappe.form_dict.msg or "Your payment has failed." }}</p>
 	<div><a href='{{ frappe.form_dict.redirect_to or "/" }}' class='btn btn-primary btn-sm'>
 		{{ _("Continue") }}</a></div>
 </div>

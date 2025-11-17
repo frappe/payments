@@ -32,6 +32,11 @@ $(document).ready(function() {
 					console.error("Error: No form found in payment_url");
 				}
             }
+            if (r && r.message && r.message.msg && r.message.url) {
+                const urlWithMsg = `${r.message.url}?msg=${encodeURIComponent(r.message.msg)}`;
+                window.location.href = urlWithMsg;
+            }
+
         },
         error: function(err) {
             console.error("API call failed:", err);

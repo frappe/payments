@@ -1,0 +1,144 @@
+{
+ "actions": [],
+ "autoname": "autoincrement",
+ "creation": "2025-11-16 20:02:20.827105",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "order_id",
+  "payment_request",
+  "request_url",
+  "resource_payload",
+  "access_count",
+  "access_type",
+  "status_before",
+  "request_data",
+  "column_break_lati",
+  "access_timestamp",
+  "integration_request",
+  "payment_url",
+  "payload_before_encryption",
+  "ip_address",
+  "session_id",
+  "user_agent"
+ ],
+ "fields": [
+  {
+   "fieldname": "order_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Order ID"
+  },
+  {
+   "fieldname": "payment_request",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Payment Request",
+   "options": "Payment Request"
+  },
+  {
+   "fieldname": "integration_request",
+   "fieldtype": "Link",
+   "label": "Integration Request",
+   "options": "Integration Request"
+  },
+  {
+   "fieldname": "payment_url",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Payment URL"
+  },
+  {
+   "fieldname": "access_timestamp",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Access Timestamp"
+  },
+  {
+   "default": "Clicked",
+   "fieldname": "access_type",
+   "fieldtype": "Select",
+   "label": "Access Type",
+   "options": "Clicked\nGateway Redirect\nSystem Check"
+  },
+  {
+   "default": "1",
+   "fieldname": "access_count",
+   "fieldtype": "Int",
+   "label": "Access Count"
+  },
+  {
+   "fieldname": "ip_address",
+   "fieldtype": "Data",
+   "label": "IP Address"
+  },
+  {
+   "fieldname": "user_agent",
+   "fieldtype": "Small Text",
+   "label": "User Agent"
+  },
+  {
+   "fieldname": "session_id",
+   "fieldtype": "Data",
+   "label": "Session ID"
+  },
+  {
+   "fieldname": "status_before",
+   "fieldtype": "Data",
+   "label": "Status Before Access"
+  },
+  {
+   "fieldname": "payload_before_encryption",
+   "fieldtype": "Small Text",
+   "label": "Encrypted Payload"
+  },
+  {
+   "fieldname": "resource_payload",
+   "fieldtype": "Small Text",
+   "label": "Resource payload"
+  },
+  {
+   "fieldname": "column_break_lati",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "request_url",
+   "fieldtype": "Data",
+   "label": "Request URL"
+  },
+  {
+   "fieldname": "request_data",
+   "fieldtype": "Long Text",
+   "label": "Request Data"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2025-11-16 21:49:04.047698",
+ "modified_by": "Administrator",
+ "module": "Payments",
+ "name": "Payment URL Activity Log",
+ "naming_rule": "Autoincrement",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}

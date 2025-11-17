@@ -158,7 +158,6 @@ def make_custom_fields():
 		frappe.clear_cache(doctype="Web Form")
 
 	if not frappe.get_meta("Payment Request").has_field("custom_name"):
-		print("yess")
 		click.secho("* Installing Payment Custom Fields in Payment Request")
 		create_custom_fields(
 			{
