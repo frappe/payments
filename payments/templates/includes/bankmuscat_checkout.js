@@ -8,6 +8,9 @@ $(document).ready(function() {
         return;
     }
 
+    console.log("data:",data)
+    console.log("id:",data.order_id)
+
     frappe.call({
         method: "payments.templates.pages.bankmuscat_checkout.get_payment_url",
         freeze: true,
