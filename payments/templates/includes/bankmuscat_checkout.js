@@ -9,13 +9,6 @@ $(document).ready(function() {
         return;
     }
 
-    // var data = {{ frappe.form_dict | json }}; // Get data from backend
-
-    // if (!data || !data.order_id) {
-    //     console.error("Error: Missing order_id");
-    //     return;
-    // }
-
     console.log("id:",order_id)
 
     frappe.call({
