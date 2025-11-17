@@ -29,7 +29,6 @@ def check_already_payment_processed(request, reference_doctype, reference_docnam
 # Fetch and return the Bank Muscat payment URL for a valid Integration Request.
 @frappe.whitelist(allow_guest=True)
 def get_payment_url(data=None):
-	frappe.log_error(title="get data",message=data)
 	try:
 		if isinstance(data, str):
 			data = frappe.parse_json(data or "{}")
@@ -52,8 +51,6 @@ def get_payment_url(data=None):
 			)
 
 		order_details = frappe._dict(frappe.parse_json(order_data))
-
-		frappe.log_error(title="log",message=f"order id ->{data.order_id},payment request->{data.order_id}")
 
 		log, msg = create_payment_url_activity_log(
 			order_id=data.order_id,

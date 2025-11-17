@@ -1,15 +1,22 @@
 $(document).ready(function() {
 
+    const order_id = new URLSearchParams(window.location.search).get("order_id");
 
-    var data = {{ frappe.form_dict | json }}; // Get data from backend
+    console.log("ORDER ID (from client URL):", order_id);
 
-    if (!data || !data.order_id) {
+    if (!order_id) {
         console.error("Error: Missing order_id");
         return;
     }
 
-    console.log("data:",data)
-    console.log("id:",data.order_id)
+    // var data = {{ frappe.form_dict | json }}; // Get data from backend
+
+    // if (!data || !data.order_id) {
+    //     console.error("Error: Missing order_id");
+    //     return;
+    // }
+
+    console.log("id:",order_id)
 
     frappe.call({
         method: "payments.templates.pages.bankmuscat_checkout.get_payment_url",
@@ -19,7 +26,7 @@ $(document).ready(function() {
         },
         args: {
             data: {
-                "order_id": data.order_id
+                "order_id": order_id
             }
         },
         callback: function(r) {
