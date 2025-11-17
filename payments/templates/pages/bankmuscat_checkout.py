@@ -9,7 +9,6 @@ from payments.payment_gateways.doctype.bankmuscat_settings.bankmuscat_settings i
 	BankMuscatSettings as BankMuscat,
 	get_gateway_controller
 )
-from payments.payments.doctype.payment_url_activity_log.payment_url_activity_log import create_payment_url_activity_log
 
 # Check if any previously created Integration Request has status = "Completed";
 # if yes, return the payment success page URL
