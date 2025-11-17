@@ -52,17 +52,13 @@ def get_payment_url(data=None):
 
 		order_details = frappe._dict(frappe.parse_json(order_data))
 
-		log, msg = create_payment_url_activity_log(
-			order_id=data.order_id,
-			payment_request=data.order_id,
-			integration_request=data.order_id,
-			resource_payload=order_details,
-			access_type="System Check"
-		)
+		condition, msg, status = check_url_usage_status(data.order_id) 
 
-		if not log and msg:
-			return {"msg": msg, "url": get_url("/payment-failed")}
-
+		if condition:
+			if status == "pending":
+				return {"msg": msg, "url": get_url("/payment-failed")}
+			if status == "completed":	
+				return {"msg": msg, "url": get_url("/payment-success")}
 		
 		reference_doctype = order_details.get("reference_doctype")
 	
@@ -97,7 +93,7 @@ def get_payment_url(data=None):
 
 		gateway_doc = frappe.get_doc("BankMuscat Settings", gateway_controller)
 
-		payment_url = gateway_doc.get_payment_page_url(**order_details, log=log)
+		payment_url = gateway_doc.get_payment_page_url(**order_details)
 		if not payment_url:
 			frappe.throw(
 				_("Unable to generate payment URL. Please try again later."),
@@ -485,3 +481,58 @@ def get_payment_status(payment_request):
 			title="get_payment_status", message="BankMuscat Payment Status API Error: frappe.get_traceback()"
 		)
 		return {"status": "error", "message": frappe.get_traceback()}
+
+def check_url_usage_status(id):
+	try:
+		from frappe.utils import now_datetime
+		integration_request = frappe.db.get_value(
+			"Integration Request",
+			id,
+			["status", "url_access_time"],
+			as_dict=True
+		)
+
+		status = integration_request.status
+		last_access_time = integration_request.url_access_time
+
+		if status != "Completed" and not last_access_time:
+			frappe.db.set_value(
+				"Integration Request",
+				id,
+				"url_access_time",
+				now_datetime()
+			)
+			return False, None, None
+
+		elif status != "Completed" and last_access_time:
+
+			from datetime import datetime
+			if isinstance(last_access_time, str):
+				last_access_time = datetime.fromisoformat(last_access_time)
+
+			current_time = now_datetime()
+			diff_minutes = (current_time - last_access_time).total_seconds() / 60
+
+			if diff_minutes < 45:
+				remaining = 45 - int(diff_minutes)
+
+				message = _(
+					"This payment link will be available again after {0} minutes. Please try again later."
+				).format(remaining)
+
+				return True, message, "pending"
+
+			return False, None, None
+
+		elif status == "Completed":
+			message = (
+				"This payment has already been completed successfully. No further action is required."
+			)
+			return True, None, "completed"
+
+	except Exception as e:
+		frappe.log_error(
+			title="BankMuscat URL Access Check Failed",
+			message=frappe.get_traceback()
+		)
+		return True, "Oops! Something didn’t work as expected. Please contact our Al Farsi service team for help.", "pending"

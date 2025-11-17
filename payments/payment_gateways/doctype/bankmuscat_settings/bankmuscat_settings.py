@@ -171,7 +171,7 @@ class BankMuscatSettings(Document):
 			frappe.throw(_("Parameter 'order_id' is missing"))	
 
 	# Generate the BankMuscat payment page URL and return an auto-submitting HTML form.
-	def get_payment_page_url(self, log, **kwargs):
+	def get_payment_page_url(self, **kwargs):
 		try:
 			self.validate_mandatory_values(**kwargs)
 
@@ -211,11 +211,6 @@ class BankMuscatSettings(Document):
 					xscode=xscode, 
 					action_url=action_url
 				)
-
-			log.payload_before_encryption = encrypted_req
-			log.payment_url = action_url
-			log.request_data = json.dumps(merchant_data, indent=2)
-			log.save(ignore_permissions=True)
 				
 			return html
 		except Exception:

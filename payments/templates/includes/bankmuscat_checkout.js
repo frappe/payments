@@ -1,15 +1,10 @@
 $(document).ready(function() {
-
     const order_id = new URLSearchParams(window.location.search).get("order_id");
-
-    console.log("ORDER ID (from client URL):", order_id);
 
     if (!order_id) {
         console.error("Error: Missing order_id");
         return;
     }
-
-    console.log("id:",order_id)
 
     frappe.call({
         method: "payments.templates.pages.bankmuscat_checkout.get_payment_url",

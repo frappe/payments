@@ -137,25 +137,30 @@ def make_custom_fields():
 						"options": "Currency",
 						"insert_after": "amount",
 					},
-				],
-				"Payment Request": [
-					{
-						"fieldname": "custom_name",
-						"fieldtype": "Data",
-						"label": "Name",
-						"insert_after": "naming_series",
-					},
-					{
-						"fieldname": "custom_payment_reference_no",
-						"fieldtype": "Data",
-						"label": "Payment Reference No",
-						"insert_after": "transaction_date",
-					},
-				],
+				]
 			}
 		)
 
 		frappe.clear_cache(doctype="Web Form")
+
+	if not frappe.get_meta("Integration Request").has_field("url_access_time"):
+		click.secho("* Installing URL Access Time Custom Field in Integration Request")
+
+		create_custom_fields(
+			{
+				"Integration Request": [
+					{
+						"fieldname": "url_access_time",
+						"fieldtype": "Datetime",
+						"label": "Payment URL Access Time",
+						"insert_after": "status",
+						"read_only": 1,
+					}
+				]
+			}
+		)
+
+		frappe.clear_cache(doctype="Integration Request")
 
 	if not frappe.get_meta("Payment Request").has_field("custom_name"):
 		click.secho("* Installing Payment Custom Fields in Payment Request")
@@ -238,6 +243,19 @@ def delete_custom_fields():
 
 		frappe.clear_cache(doctype="Payment Request")
 
+	if frappe.get_meta("Integration Request").has_field("url_access_time"):
+		click.secho("* Uninstalling Integration Request Custom Fields")
+
+		integration_request_fields = [
+			"url_access_time",
+		]
+
+		frappe.db.delete(
+			"Custom Field",
+			{"name": ["in", [f"Integration Request-{field}" for field in integration_request_fields]]}
+		)
+
+		frappe.clear_cache(doctype="Integration Request")
 
 def before_install():
 	# TODO: remove this
