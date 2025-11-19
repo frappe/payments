@@ -167,6 +167,11 @@ def handle_payment_response(data_dict, reference_doctype, reference_docname):
 				"Integration Request", doc_name, {"status": "Completed", "output": json.dumps(data, indent=4)}
 			)
 
+			frappe.local.session["last_payment_doc"] = {
+				"doctype": reference_doctype,
+				"docname": reference_docname
+			}
+
 			return redirect_response("payment-success")
 
 		elif order_status in ("failure", "invalid", "timeout"):
