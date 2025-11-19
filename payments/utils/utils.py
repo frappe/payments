@@ -171,18 +171,47 @@ def make_custom_fields():
 						"fieldname": "custom_name",
 						"fieldtype": "Data",
 						"label": "Name",
-						"insert_after": "naming_series",
+						"insert_after": "mode_of_payment",
+						"read_only": 1,
+					},
+					{
+						"fieldname": "response_command",
+						"fieldtype": "Small Text",
+						"label": "Response Command",
+						"insert_after": "custom_name",
+						"read_only": 1,
 					},
 					{
 						"fieldname": "custom_payment_reference_no",
 						"fieldtype": "Data",
 						"label": "Payment Reference No",
-						"insert_after": "transaction_date",
+						"insert_after": "failed_reason",
+						"read_only": 1,
 					},
+					{
+						"fieldname": "bank_reference_no",
+						"fieldtype": "Data",
+						"label": "Bank Reference No",
+						"insert_after": "custom_payment_reference_no",
+						"read_only": 1,
+					},
+					{
+						"fieldname": "transaction_status",
+						"fieldtype": "Data",
+						"label": "Transaction status",
+						"insert_after": "party_account_currency",
+						"read_only": 1
+					},
+					{
+						"fieldname": "payment_entry",
+						"fieldtype": "Data",
+						"label": "Payment Entry",
+						"insert_after": "bank_reference_no",
+						"read_only": 1	
+					}
 				]
 			}
 		)
-
 		frappe.clear_cache(doctype="Payment Request")
 
 	if "erpnext" in frappe.get_installed_apps():
@@ -234,7 +263,11 @@ def delete_custom_fields():
 
 		payment_request_fields = [
 			"custom_name",
+			"response_command",
 			"custom_payment_reference_no",
+			"bank_reference_no",
+			"transaction_status",
+			"payment_entry"
 		]
 
 		frappe.db.delete(

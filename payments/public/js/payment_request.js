@@ -7,6 +7,16 @@ frappe.ui.form.on("Payment Request", {
 
     const isBankMuscat = firstWord === "bankmuscat";
 
+    frappe.call({
+      method: "payments.templates.pages.bankmuscat_checkout.set_payment_entry",
+      args:{
+        "doc_name":frm.doc.name
+      },
+      callback: function(r){
+        frm.refresh_field("payment_entry");
+      }
+    })
+                  
     if (
       isInward &&
       isInitiated &&
@@ -29,6 +39,30 @@ frappe.ui.form.on("Payment Request", {
           },
         });
       });
+    }
+
+    if(frm.doc.status === "Paid" && !frm.doc.payment_entry && frm.doc.response_command){
+      frappe.call({
+        method:"payments.templates.pages.bankmuscat_checkout.check_roles",
+        args:{},
+        callback:function(r){
+          if(r.message){
+            frm.add_custom_button(__("Create Payment Entry"), function () {
+              frappe.call({
+                method: "erpnext.accounts.doctype.payment_request.payment_request.make_payment_entry",
+                args: { docname: frm.doc.name },
+                freeze: true,
+                callback: function (r) {
+                  if (!r.exc) {
+                    var doc = frappe.model.sync(r.message);
+                    frappe.set_route("Form", r.message.doctype, r.message.name);
+                  }
+                },
+              });
+            }).addClass("btn-primary");
+          }
+        }
+      }) 
     }
   },
 });

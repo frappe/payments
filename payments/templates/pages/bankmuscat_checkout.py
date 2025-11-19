@@ -122,20 +122,46 @@ def handle_payment_response(data_dict, reference_doctype, reference_docname):
 
 	# Save tracking ID if not already saved
 	if payment_request.status == "Initiated" and not payment_request.custom_payment_reference_no:
-		payment_request.db_set("custom_payment_reference_no", data.get("tracking_id"))
+		payment_request.db_set({
+			"transaction_date": getdate(data.get("trans_date")),
+			"custom_payment_reference_no": data.get("tracking_id"),
+			"bank_reference_no": data.get("bank_ref_no")
+		})
 
 	order_status = data.get("order_status", "").lower()
 
 	try:
 		if order_status == "success":
-			payment_entry = payment_request.set_as_paid()
-			payment_request.db_set("transaction_status", "The payment has been completed")
+			msg = _(
+				"The customer has successfully completed the payment for the requested order. "
+				"Details: Order ID: {order_id}, Amount: {amount}, Payment Reference: {payment_ref_no}, "
+				"Bank Reference: {bank_ref_no}, Date: {payment_date}. "
+				"Please update your records accordingly."
+			).format(
+				order_id=data.get("order_id"),
+				amount=data.get("amount"),
+				payment_ref_no=data.get("tracking_id"),
+				bank_ref_no=data.get("bank_ref_no"),
+				payment_date=data.get("trans_date")
+			)
 
 			frappe.db.set_value(
-				"Payment Entry",
-				payment_entry.name,
-				{"reference_no": data.get("bank_ref_no"), "reference_date": getdate(data.get("trans_date"))},
+				reference_doctype,
+				reference_docname,
+				{
+					"status": "Paid",
+					"transaction_status": "The payment has been completed",
+					"response_command": msg,
+				}
 			)
+			# payment_entry = payment_request.set_as_paid()
+			# payment_request.db_set("transaction_status", "The payment has been completed")
+
+			# frappe.db.set_value(
+			# 	"Payment Entry",
+			# 	payment_entry.name,
+			# 	{"reference_no": data.get("bank_ref_no"), "reference_date": getdate(data.get("trans_date"))},
+			# )
 
 			frappe.db.set_value(
 				"Integration Request", doc_name, {"status": "Completed", "output": json.dumps(data, indent=4)}
@@ -535,3 +561,41 @@ def check_url_usage_status(id):
 			message=frappe.get_traceback()
 		)
 		return True, "Oops! Something didn’t work as expected. Please contact our Al Farsi service team for help.", "pending"
+
+@frappe.whitelist()
+def set_payment_entry(doc_name):
+
+	exist_doc = frappe.db.get_value(
+		"Payment Entry",
+		{ "reference_no": doc_name },
+		"name"
+	)
+
+	if exist_doc:
+		frappe.db.set_value(
+			"Payment Request",
+			doc_name,
+			"payment_entry",
+			exist_doc
+		)
+
+	return True
+
+@frappe.whitelist()
+def check_roles():
+	roles = frappe.get_all(
+		"DocPerm",
+		filters={
+			"parent": "Payment Entry",
+			"permlevel": 0,
+			"create": 1
+		},
+		fields=["role"]
+	)
+	
+	user_roles = frappe.get_roles(frappe.session.user)
+	
+	has_permission = any(r["role"] in user_roles for r in roles)
+
+	return has_permission
+
