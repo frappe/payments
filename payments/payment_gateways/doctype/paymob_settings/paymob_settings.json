@@ -10,12 +10,14 @@
   "public_key",
   "hmac",
   "column_break_rdwp",
-  "token",
   "secret_key",
+  "token",
+  "expires_in",
   "payment_config",
   "iframe",
-  "column_break_bpek",
-  "payment_integration"
+  "payment_integration",
+  "column_break_qgqc",
+  "redirect_to"
  ],
  "fields": [
   {
@@ -41,7 +43,8 @@
    "fieldname": "hmac",
    "fieldtype": "Password",
    "in_list_view": 1,
-   "label": "HMAC"
+   "label": "HMAC",
+   "reqd": 1
   },
   {
    "fieldname": "column_break_rdwp",
@@ -72,21 +75,32 @@
    "reqd": 1
   },
   {
-   "fieldname": "column_break_bpek",
-   "fieldtype": "Column Break"
-  },
-  {
    "fieldname": "payment_integration",
    "fieldtype": "Int",
    "label": "Payment Integration",
    "reqd": 1
+  },
+  {
+   "fieldname": "expires_in",
+   "fieldtype": "Datetime",
+   "label": "Expires In"
+  },
+  {
+   "fieldname": "column_break_qgqc",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Mention transaction completion page URL\n\n",
+   "fieldname": "redirect_to",
+   "fieldtype": "Data",
+   "label": "Redirect To"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-10-30 01:14:02.729163",
+ "modified": "2025-11-20 23:53:24.529932",
  "modified_by": "Administrator",
  "module": "Payment Gateways",
  "name": "Paymob Settings",

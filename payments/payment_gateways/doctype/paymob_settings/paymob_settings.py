@@ -1,12 +1,14 @@
 # Copyright (c) 2025, Frappe Technologies and contributors
 # For license information, please see license.txt
 
+from datetime import timedelta
 from urllib.parse import urlencode
 
 import frappe
 from frappe import _
 from frappe.integrations.utils import create_request_log, make_get_request, make_post_request
 from frappe.model.document import Document
+from frappe.utils import get_datetime, now_datetime
 
 from payments.payment_gateways.paymob.accept_api import AcceptAPI
 from payments.payment_gateways.paymob.hmac_validator import HMACValidator
@@ -34,9 +36,27 @@ class PaymobSettings(Document):
 
 	@frappe.whitelist()
 	def get_access_token(self):
+		"""Retrieve a new access token and store expiry time"""
 		accept = AcceptAPI()
 		token = accept.retrieve_auth_token()
+
+		if token:
+			self.token = token
+			self.expires_in = now_datetime() + timedelta(hours=1)
+			self.save(ignore_permissions=True)
+			frappe.db.commit()
+
 		return token
+
+	def get_valid_token(self):
+		"""Get a valid token, refresh if expired"""
+		if self.token and self.expires_in:
+			if isinstance(self.expires_in, str):
+				self.expires_in = get_datetime(self.expires_in)
+			if now_datetime() < self.expires_in:
+				return self.get_password("token")
+
+		return self.get_access_token()
 
 	def get_payment_url(self, **kwargs):
 		try:
@@ -45,7 +65,7 @@ class PaymobSettings(Document):
 			if not kwargs.get("order_id") or not kwargs.get("amount"):
 				frappe.throw(_("Missing order ID or amount"))
 
-			# Build dummy billing data (Paymob requires this)
+			# Build dummy billing data
 			billing_data = {
 				"apartment": "NA",
 				"email": kwargs.get("payer_email"),
@@ -63,7 +83,7 @@ class PaymobSettings(Document):
 			}
 
 			payment_key_payload = {
-				"auth_token": self.get_password("token"),
+				"auth_token": self.get_valid_token(),
 				"amount_cents": str(int(float(kwargs.get("amount")) * 100)),
 				"expiration": 3600,
 				"order_id": kwargs.get("order_id"),
@@ -89,20 +109,16 @@ class PaymobSettings(Document):
 			frappe.throw(_("Could not generate Paymob payment URL"))
 
 	def create_order(self, **kwargs):
-		# Create integration log
 		integration_request = create_request_log(kwargs, service_name="Paymob")
 		paymob_urls = PaymobUrls()
 
-		# Get your API token
-		token = self.get_password("token")
+		token = self.get_valid_token()
 
-		# Required fields by Paymob
 		amount_cents = int(kwargs.get("amount")) * 100  # Paymob uses cents
 		currency = kwargs.get("currency", "EGP")
 		delivery_needed = kwargs.get("delivery_needed", False)
-		items = kwargs.get("items", [])  # Required field even if empty
+		items = kwargs.get("items", [])
 
-		# Construct payload
 		payload = {
 			"auth_token": token,
 			"delivery_needed": str(delivery_needed).lower(),
