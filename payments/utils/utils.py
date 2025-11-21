@@ -60,6 +60,8 @@ def create_payment_gateway(gateway, settings=None, controller=None):
 
 
 def make_custom_fields():
+	make_payment_gateway_account_custom_fields()
+
 	if not frappe.get_meta("Web Form").has_field("payments_tab"):
 		click.secho("* Installing Payment Custom Fields in Web Form")
 
@@ -161,6 +163,28 @@ def make_custom_fields():
 		create_custom_fields(custom_fields)
 
 
+def make_payment_gateway_account_custom_fields():
+	if frappe.db.exists("DocType", "Payment Gateway Account"):
+		click.secho("* Installing Payment Custom Fields in Payment Gateway Account")
+
+		create_custom_fields(
+			{
+				"Payment Gateway Account": [
+					{
+						"fieldname": "payment_gateway",
+						"fieldtype": "Link",
+						"in_list_view": 1,
+						"label": "Payment Gateway",
+						"options": "Payment Gateway",
+						"reqd": 1,
+					}
+				]
+			}
+		)
+
+		frappe.clear_cache(doctype="Payment Gateway Account")
+
+
 def delete_custom_fields():
 	if not frappe.get_meta("Web Form").has_field("payments_tab"):
 		return
@@ -187,6 +211,9 @@ def delete_custom_fields():
 			),
 		},
 	)
+
+	click.secho("* Uninstalling Payment Custom Fields from Payment Gateway Account")
+	frappe.db.delete("Custom Field", {"dt": "Payment Gateway Account", "fieldname": "payment_gateway"})
 
 	frappe.clear_cache(doctype="Web Form")
 
