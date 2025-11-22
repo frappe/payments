@@ -41,22 +41,38 @@ class PaymobSettings(Document):
 		token = accept.retrieve_auth_token()
 
 		if token:
-			self.token = token
-			self.expires_in = now_datetime() + timedelta(hours=1)
+			self.expires_in = now_datetime() + timedelta(minutes=50)
 			self.save(ignore_permissions=True)
 			frappe.db.commit()
 
 		return token
 
-	def get_valid_token(self):
-		"""Get a valid token, refresh if expired"""
-		if self.token and self.expires_in:
-			if isinstance(self.expires_in, str):
-				self.expires_in = get_datetime(self.expires_in)
-			if now_datetime() < self.expires_in:
-				return self.get_password("token")
+	def refresh_access_token(self):
+		"""
+		If existing token expired → fetch new one
+		"""
 
-		return self.get_access_token()
+		accept = AcceptAPI()
+		token = accept.retrieve_auth_token()
+		self.token = token
+		self.expires_in = now_datetime() + timedelta(minutes=50)
+		self.save(ignore_permissions=True)
+		frappe.db.commit()
+
+		return token
+
+	def get_valid_token(self):
+		token = self.get_password("token") if self.token else None
+
+		buffer = timedelta(minutes=2)
+		if token and self.expires_in:
+			expires_in = (
+				get_datetime(self.expires_in) if isinstance(self.expires_in, str) else self.expires_in
+			)
+			if now_datetime() + buffer < expires_in:
+				return token
+
+		return self.refresh_access_token()
 
 	def get_payment_url(self, **kwargs):
 		try:
