@@ -35,18 +35,6 @@ class PaymobSettings(Document):
 	# end: auto-generated types
 
 	@frappe.whitelist()
-	def get_access_token(self):
-		"""Retrieve a new access token and store expiry time"""
-		accept = AcceptAPI()
-		token = accept.retrieve_auth_token()
-
-		if token:
-			self.expires_in = now_datetime() + timedelta(minutes=50)
-			self.save(ignore_permissions=True)
-			frappe.db.commit()
-
-		return token
-
 	def refresh_access_token(self):
 		"""
 		If existing token expired → fetch new one

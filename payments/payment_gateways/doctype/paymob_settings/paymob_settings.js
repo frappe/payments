@@ -11,7 +11,7 @@ frappe.ui.form.on("Paymob Settings", {
     try {
       frm
         .call({
-          method: "get_access_token",
+          method: "refresh_access_token",
           doc: frm.doc,
           freeze: true,
           freeze_message: __("Getting Access Token ..."),
