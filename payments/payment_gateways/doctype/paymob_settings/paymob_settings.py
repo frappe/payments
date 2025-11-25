@@ -45,7 +45,6 @@ class PaymobSettings(Document):
 		self.token = token
 		self.expires_in = now_datetime() + timedelta(minutes=50)
 		self.save(ignore_permissions=True)
-		frappe.db.commit()
 
 		return token
 
