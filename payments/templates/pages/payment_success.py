@@ -9,7 +9,7 @@ no_cache = True
 def get_context(context):
 	context.payment_message = ""
 	friendly_message = (
-		"Your payment has been successfully completed. However, we were unable to load the confirmation page due to a technical issue. Please contact our support team for verification."
+		"Your payment has been successfully completed."
 	)
 
 	try:
@@ -47,6 +47,6 @@ def get_context(context):
 	except Exception as e:
 		frappe.log_error(frappe.get_traceback(), "Payment Success Page Error")
 
-		context.payment_message = friendly_message
+		context.payment_message = "Your payment has been successfully completed. However, we were unable to load the confirmation page due to a technical issue. Please contact our support team for verification."
 
 	return context
