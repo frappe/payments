@@ -3,3 +3,6 @@ paytmchecksum~=1.7.0
 razorpay~=1.2.0
 stripe~=2.56.0
 braintree~=4.20.0
+
+# Pin for compatibility, v2 has breaking changes
+urllib3>=1.26.4,<2
