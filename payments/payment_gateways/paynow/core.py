@@ -9,7 +9,7 @@ from .test_internals import resolve_test_credential
 from .models import Payment, PaymentResponse
 from .enums import PaymentMethod, PaymentStatus, TestMode
 
-logger = logging.getLogger("paynow_sdk")
+logger = logging.getLogger("erpnext_paynow")
 logger.setLevel(logging.DEBUG)
 
 formatter = logging.Formatter(
@@ -44,9 +44,6 @@ class Paynow:
         else:
             raise TypeError("Config must be a PaynowConfig or list of PaynowConfig")
 
-    # ------------------------------------------------------------------
-    # 1. Standard Web Redirect Transaction
-    # ------------------------------------------------------------------
     def initiate_web(self, payment: Payment) -> PaymentResponse:
         """
         Initiates a standard browser-based transaction.
@@ -56,10 +53,7 @@ class Paynow:
 
         logger.debug(f"Initiating Web Transaction for request ref: {payment.merchant_reference} in {payment.currency}")
         
-        # Build base payload
         payload = self._build_common_payload(payment, conf)
-        
-        # Add hash and send
         payload['hash'] = self._generate_hash(payload, conf.integration_key)
         
         response = requests.post(self._URL_WEB_INIT, data=payload)
@@ -85,9 +79,6 @@ class Paynow:
         response.raise_for_status()
         return self._parse_response(response.text)
 
-    # ------------------------------------------------------------------
-    # 2. Express Checkout (Mobile/Remote/Token)
-    # ------------------------------------------------------------------
     def initiate_express(self, 
                          payment: Payment, 
                          method: PaymentMethod, 
@@ -103,7 +94,6 @@ class Paynow:
             - VMC/ZimSwitch: Require 'merchanttrace' (auto-filled from ref if missing).
                              'token' is optional (used for recurring).
         """
-        # 1. Validate Express-Specific Requirements
         if not payment.customer_email:
             raise ValueError("Express Checkout requires 'customer_email' to be set on the Payment object.")
 
@@ -115,30 +105,23 @@ class Paynow:
 
         phone = phone or payment.customer_phone
         
-        # 2. Set Method
         payload["method"] = method.value
 
-        # 3. Handle Identifier (Phone vs Token) + Test Mode
-        # If Test Mode is active, it overrides the inputs with the magic numbers
-        if test_mode != TestMode.NONE:    
-            # If it's a mobile method, the magic credential goes to 'phone'
+        if test_mode != TestMode.NONE:
             if method in [PaymentMethod.ECOCASH, PaymentMethod.ONEMONEY, PaymentMethod.INNBUCKS, PaymentMethod.OMARI]:
                 magic_credential = resolve_test_credential(method, test_mode, phone or "")
                 payload["phone"] = magic_credential
-            # If it's a card method, the magic credential goes to 'token' (if simulating tokenized recur)
             elif method in [PaymentMethod.VMC, PaymentMethod.ZIMSWITCH]:
                 magic_credential = resolve_test_credential(method, test_mode, token or "")
                 payload["token"] = magic_credential
                 
         else:
-            # LIVE MODE MAPPING
             if method in [PaymentMethod.ECOCASH, PaymentMethod.ONEMONEY, PaymentMethod.INNBUCKS, PaymentMethod.OMARI]:
                 if not phone:
                     raise ValueError(f"{method.value} requires a 'phone' number.")
                 payload["phone"] = phone
             
             elif method in [PaymentMethod.VMC, PaymentMethod.ZIMSWITCH]:
-                # Token is optional (only for recurring)
                 if token:
                     payload["token"] = token
                 
@@ -147,7 +130,6 @@ class Paynow:
                 trace_value = payment.merchant_trace or payment.merchant_reference
                 payload["merchanttrace"] = trace_value
 
-        # 4. Hash and Send
         payload['hash'] = self._generate_hash(payload, conf.integration_key)
 
         response = requests.post(self._URL_EXPRESS_INIT, data=payload)
@@ -189,9 +171,6 @@ class Paynow:
 
         return result    
     
-    # ------------------------------------------------------------------
-    # Internal Logic
-    # ------------------------------------------------------------------
     def _get_config(self, currency: str) -> PaynowConfig:
         key = currency.upper()
         if key not in self._configs:
@@ -213,7 +192,6 @@ class Paynow:
             "status": "Message"
         }
 
-        # Optional fields - only add if they exist
         if payment.customer_email:
             data["authemail"] = payment.customer_email
         if payment.customer_phone:
@@ -231,8 +209,6 @@ class Paynow:
 
     def _generate_hash(self, values: dict, key: str) -> str:
         s = ""
-        # Paynow hash order relies on values being concatenated 
-        # (excluding 'hash' key) + IntegrationKey
         for k, v in values.items():
             if k != 'hash': 
                 s += str(v)
