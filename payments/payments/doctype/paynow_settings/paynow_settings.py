@@ -14,7 +14,7 @@ from frappe.utils import call_hook_method, get_url
 
 from payments.utils import erpnext_app_import_guard, create_payment_gateway
 
-from payments.payment_gateways.paynow import logger, Paynow, PaynowConfig, PaymentResponse, Payment, CartItem, PaymentStatus
+from paynow_sdk import Paynow, PaynowConfig, PaymentResponse, Payment, CartItem, PaymentStatus
 
 IR_STATUS_MAPPER = {
 		PaymentStatus.PAID: "Completed",
@@ -142,8 +142,6 @@ class PaynowSettings(Document):
 			redirect_callback_url= redirect_url
 		)
 
-		logger.debug(f"Paynow obj, status_callback_url: {callback_url}, redirect_callback_url: {redirect_url}")
-
 		return api
 
 	def get_payment_url(self, **kwargs):
@@ -172,7 +170,6 @@ class PaynowSettings(Document):
 				"paynow_init": response.upstream_data
 			}
 		)
-		logger.debug(f"Paynow initiation response: {response}")
 
 		if response.success and response.redirect_url:
 			create_request_log(kwargs, service_name="Paynow", name=response.merchant_reference)
@@ -192,25 +189,21 @@ def paynow_callback():
 	"""
 	data = frappe.request.form.to_dict()
 
-	logger.debug(f"Paynow status callback: {data}")
-
 	payment_response = PaymentResponse.from_raw(data)
-
-	logger.debug(f"Parsed paynow status callback response: {payment_response}")
 
 	ir = frappe.get_doc("Integration Request", payment_response.merchant_reference)
   
-	logger.debug(f"Paynow status Integration Request: {ir.as_dict()}")
-
 	if payment_response.is_paid:
-		ref_doc = frappe.get_doc(ir.reference_doctype, ir.reference_docname)
+		try:
+			ref_doc = frappe.get_doc(ir.reference_doctype, ir.reference_docname)
 
-		if ir.status != "Completed":
-			ref_doc.run_method("on_payment_authorized", "Completed")
-			ir.handle_success(payment_response.upstream_data)
-			frappe.db.commit()
-			logger.debug(f"Paynow payment marked as Completed for Integration Request: {ir.name}")
-			return "OK"
+			if ir.status != "Completed":
+				ref_doc.run_method("on_payment_authorized", "Completed")
+				ir.handle_success(payment_response.upstream_data)
+				frappe.db.commit()
+				return "OK"
+		except:
+			frappe.log_error(title="Paynow Accounting Error")
 
 	ir.update_status({"paynow_response": data}, IR_STATUS_MAPPER.get(payment_response.status, "Failed"))
 
@@ -218,8 +211,6 @@ def paynow_callback():
 		ir.db_set("error", payment_response.message, update_modified=False)
 
 	frappe.db.commit()
-
-	logger.debug(f"Paynow({payment_response.status}) callback processing completed for Integration Request: {ir.name}")
 
 	return "OK"
 
@@ -235,8 +226,6 @@ def paynow_return_manager(order_id):
 	"""
 	data = frappe.request.form.to_dict()
 
-	logger.debug(f"Paynow redirect data: {data}")
-
 	try:
 		settings_name = frappe.db.get_value("Paynow Settings", {}, "name")
 
@@ -248,8 +237,6 @@ def paynow_return_manager(order_id):
 		api: Paynow = settings.get_instance(order_id)
 
 		ir = frappe.get_doc("Integration Request", order_id)
-
-		logger.debug(f"Return callback, Integration Request: {ir.as_dict()}")
 
 		data = json.loads(ir.data)
 		paynow_init_data = data.get("paynow_init", {})
@@ -278,7 +265,6 @@ def paynow_return_manager(order_id):
 			params["redirect_to"] = data.get("redirect_to")
 
 		redirect_url = f"{base_url}?{urlencode(params)}"
-		logger.debug(f"Paynow ReturnCallback redirecting to: {redirect_url}")
 
 		frappe.local.response["type"] = "redirect"
 		frappe.local.response["location"] = get_url(redirect_url)
