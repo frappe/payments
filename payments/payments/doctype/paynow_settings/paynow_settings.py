@@ -251,7 +251,7 @@ def paynow_return_manager(order_id):
 				base_url = f"/payment-success"
 
 			elif response.status == PaymentStatus.CANCELLED:
-				base_url = "/payment-cancelled"
+				base_url = "/payment-cancel"
 
 			else:
 				base_url = "/payment-failed"
