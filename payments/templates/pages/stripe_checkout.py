@@ -32,6 +32,19 @@ def get_context(context):
 	if not (set(expected_keys) - set(list(frappe.form_dict))):
 		for key in expected_keys:
 			context[key] = frappe.form_dict[key]
+
+		# Check if payment already completed
+		if frappe.utils.check_payment_status(
+			context.reference_doctype,
+			context.reference_docname
+		):
+			frappe.redirect_to_message(
+				_('Payment Completed'),
+				_('This payment request has already been processed'),
+				http_status_code=400
+			)
+			frappe.local.flags.redirect_location = frappe.local.response.location
+			raise frappe.Redirect
 		gateway_controller = get_gateway_controller(
 			context.reference_doctype, context.reference_docname, context.payment_gateway
 		)
@@ -72,6 +85,10 @@ def get_header_image(doc, gateway_controller):
 @frappe.whitelist(allow_guest=True)
 def make_payment(stripe_token_id, data, reference_doctype=None, reference_docname=None, payment_gateway=None):
 	data = json.loads(data)
+
+	# Check if payment already completed
+	if frappe.utils.check_payment_status(reference_doctype, reference_docname):
+		frappe.throw(_('This payment has already been completed'))
 
 	data.update({"stripe_token_id": stripe_token_id})
 
