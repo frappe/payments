@@ -5,6 +5,7 @@ import json
 import frappe
 from frappe import _
 from frappe.utils import cint, fmt_money
+from payments.utils import check_payment_status
 
 from payments.payment_gateways.doctype.stripe_settings.stripe_settings import (
 	get_gateway_controller,
@@ -34,7 +35,7 @@ def get_context(context):
 			context[key] = frappe.form_dict[key]
 
 		# Check if payment already completed
-		if frappe.utils.check_payment_status(
+		if check_payment_status(
 			context.reference_doctype,
 			context.reference_docname
 		):
@@ -45,6 +46,7 @@ def get_context(context):
 			)
 			frappe.local.flags.redirect_location = frappe.local.response.location
 			raise frappe.Redirect
+
 		gateway_controller = get_gateway_controller(
 			context.reference_doctype, context.reference_docname, context.payment_gateway
 		)
@@ -86,8 +88,8 @@ def get_header_image(doc, gateway_controller):
 def make_payment(stripe_token_id, data, reference_doctype=None, reference_docname=None, payment_gateway=None):
 	data = json.loads(data)
 
-	# Check if payment already completed
-	if frappe.utils.check_payment_status(reference_doctype, reference_docname):
+	# Check if payment already completed Redundancy Safeguard
+	if check_payment_status(reference_doctype, reference_docname):
 		frappe.throw(_('This payment has already been completed'))
 
 	data.update({"stripe_token_id": stripe_token_id})
