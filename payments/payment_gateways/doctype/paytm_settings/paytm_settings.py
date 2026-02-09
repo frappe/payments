@@ -162,7 +162,7 @@ def finalize_request(order_id, transaction_response):
 				request.db_set("status", "Completed")
 			except Exception:
 				request.db_set("status", "Failed")
-				frappe.log_error(frappe.get_traceback())
+				frappe.log_error("Error in Paytm success page redirect", frappe.get_traceback())
 
 			if custom_redirect_to:
 				redirect_to = custom_redirect_to

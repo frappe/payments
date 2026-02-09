@@ -202,7 +202,7 @@ class StripeSettings(Document):
 			return self.create_charge_on_stripe()
 
 		except Exception:
-			frappe.log_error(frappe.get_traceback())
+			frappe.log_error("Error in Stripe payment processing", frappe.get_traceback())
 			return {
 				"redirect_to": frappe.redirect_to_message(
 					_("Server Error"),
@@ -230,10 +230,10 @@ class StripeSettings(Document):
 				self.flags.status_changed_to = "Completed"
 
 			else:
-				frappe.log_error(charge.failure_message, "Stripe Payment not completed")
+				frappe.log_error("Stripe Payment not completed", charge.failure_message)
 
 		except Exception:
-			frappe.log_error(frappe.get_traceback())
+			frappe.log_error("Error in Stripe payment processing", frappe.get_traceback())
 
 		return self.finalize_request()
 
@@ -250,7 +250,7 @@ class StripeSettings(Document):
 						self.data.reference_doctype, self.data.reference_docname
 					).run_method("on_payment_authorized", self.flags.status_changed_to)
 				except Exception:
-					frappe.log_error(frappe.get_traceback())
+					frappe.log_error("Error in Stripe success page redirect", frappe.get_traceback())
 
 				if custom_redirect_to:
 					redirect_to = custom_redirect_to

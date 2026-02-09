@@ -297,7 +297,7 @@ def get_express_checkout_details(token):
 		frappe.local.response["location"] = get_redirect_uri(doc, token, response.get("PAYERID")[0])
 
 	except Exception:
-		frappe.log_error(frappe.get_traceback())
+		frappe.log_error("Error in PayPal payment processing", frappe.get_traceback())
 
 
 @frappe.whitelist(allow_guest=True, xss_safe=True)
@@ -344,7 +344,7 @@ def confirm_payment(token):
 		setup_redirect(data, redirect_url, custom_redirect_to)
 
 	except Exception:
-		frappe.log_error(frappe.get_traceback())
+		frappe.log_error("Error in PayPal payment processing", frappe.get_traceback())
 
 
 @frappe.whitelist(allow_guest=True, xss_safe=True)
@@ -413,7 +413,7 @@ def create_recurring_profile(token, payerid):
 		setup_redirect(data, redirect_url, custom_redirect_to)
 
 	except Exception:
-		frappe.log_error(frappe.get_traceback())
+		frappe.log_error("Error in PayPal payment processing", frappe.get_traceback())
 
 
 def update_integration_request_status(token, data, status, error=False, doc=None):
@@ -482,7 +482,7 @@ def ipn_handler():
 	except frappe.InvalidStatusError:
 		pass
 	except Exception as e:
-		frappe.log(frappe.log_error(title=e))
+		frappe.log_error("Error in PayPal webhook handling", frappe.get_traceback())
 
 
 def validate_ipn_request(data):

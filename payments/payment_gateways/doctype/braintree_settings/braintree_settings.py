@@ -196,7 +196,7 @@ class BraintreeSettings(Document):
 			return self.create_charge_on_braintree()
 
 		except Exception:
-			frappe.log_error(frappe.get_traceback())
+			frappe.log_error("Error in Braintree payment request", frappe.get_traceback())
 			return {
 				"redirect_to": frappe.redirect_to_message(
 					_("Server Error"),
@@ -257,7 +257,7 @@ class BraintreeSettings(Document):
 					if braintree_success_page:
 						custom_redirect_to = frappe.get_attr(braintree_success_page[-1])(self.data)
 				except Exception:
-					frappe.log_error(frappe.get_traceback())
+					frappe.log_error("Error in Braintree webhook handling", frappe.get_traceback())
 
 				if custom_redirect_to:
 					redirect_to = custom_redirect_to

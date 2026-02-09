@@ -271,9 +271,9 @@ class RazorpaySettings(Document):
 					headers={"content-type": "application/json"},
 				)
 				if not resp.get("id"):
-					frappe.log_error(message=str(resp), title="Razorpay Failed while creating subscription")
+					frappe.log_error("Error in Razorpay payment processing", frappe.get_traceback())
 		except Exception:
-			frappe.log_error()
+			frappe.log_error("Error in Razorpay payment processing", frappe.get_traceback())
 			# failed
 			pass
 
@@ -310,10 +310,10 @@ class RazorpaySettings(Document):
 				frappe.flags.status = "created"
 				return kwargs
 			else:
-				frappe.log_error(message=str(resp), title="Razorpay Failed while creating subscription")
+				frappe.log_error("Error in Razorpay payment processing", frappe.get_traceback())
 
 		except Exception:
-			frappe.log_error()
+			frappe.log_error("Error in Razorpay payment processing", frappe.get_traceback())
 
 	def prepare_subscription_details(self, settings, **kwargs):
 		if not kwargs.get("subscription_id"):
@@ -357,8 +357,7 @@ class RazorpaySettings(Document):
 				order["integration_request"] = integration_request.name
 				return order  # Order returned to be consumed by razorpay.js
 			except Exception:
-				frappe.log(frappe.get_traceback())
-				frappe.throw(_("Could not create razorpay order"))
+				frappe.log_error("Error in Razorpay payment processing", frappe.get_traceback())
 
 	def create_request(self, data):
 		self.data = frappe._dict(data)
@@ -369,7 +368,7 @@ class RazorpaySettings(Document):
 			return self.authorize_payment()
 
 		except Exception:
-			frappe.log_error(frappe.get_traceback())
+			frappe.log_error("Error in Razorpay payment processing", frappe.get_traceback())
 			return {
 				"redirect_to": frappe.redirect_to_message(
 					_("Server Error"),
@@ -413,10 +412,10 @@ class RazorpaySettings(Document):
 					self.flags.status_changed_to = "Verified"
 
 			else:
-				frappe.log_error(message=str(resp), title="Razorpay Payment not authorized")
+				frappe.log_error("Error in Razorpay payment processing", frappe.get_traceback())
 
 		except Exception:
-			frappe.log_error()
+			frappe.log_error("Error in Razorpay payment processing", frappe.get_traceback())
 
 		status = frappe.flags.integration_request.status_code
 
@@ -432,7 +431,7 @@ class RazorpaySettings(Document):
 					).run_method("on_payment_authorized", self.flags.status_changed_to)
 
 				except Exception:
-					frappe.log_error(frappe.get_traceback())
+					frappe.log_error("Error in Razorpay success page redirect", frappe.get_traceback())
 
 				if custom_redirect_to:
 					redirect_to = custom_redirect_to
@@ -477,7 +476,7 @@ class RazorpaySettings(Document):
 				auth=(settings.api_key, settings.api_secret),
 			)
 		except Exception:
-			frappe.log_error(frappe.get_traceback())
+			frappe.log_error("Error in Razorpay payment processing", frappe.get_traceback())
 
 	def verify_signature(self, body, signature, key):
 		key = bytes(key, "utf-8")
@@ -561,7 +560,7 @@ def get_order(doctype, docname):
 		# Do not use run_method here as it fails silently
 		return doc.get_razorpay_order()
 	except AttributeError:
-		frappe.log_error(frappe.get_traceback(), _("Controller method get_razorpay_order missing"))
+		frappe.log_error(_("Controller method get_razorpay_order missing"), frappe.get_traceback())
 		frappe.throw(_("Could not create Razorpay order. Please contact Administrator"))
 
 
@@ -601,7 +600,7 @@ def order_payment_failure(integration_request, params):
 	        integration_request (TYPE): Description
 	        params (TYPE): error data to be updated
 	"""
-	frappe.log_error(params, "Razorpay Payment Failure")
+	frappe.log_error("Error in Razorpay payment processing", params)
 	params = json.loads(params)
 	integration = frappe.get_doc("Integration Request", integration_request)
 	integration.update_status(params, integration.status)
@@ -645,7 +644,7 @@ def razorpay_subscription_callback():
 	except frappe.InvalidStatusError:
 		pass
 	except Exception as e:
-		frappe.log(frappe.log_error(title=e))
+		frappe.log_error("Error in Razorpay webhook handling", frappe.get_traceback())
 
 
 def validate_payment_callback(data):

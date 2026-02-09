@@ -314,9 +314,7 @@ def process_balance_info(**kwargs):
 			)
 		except Exception:
 			request.handle_failure(account_balance_response)
-			frappe.log_error(
-				title="Mpesa Account Balance Processing Error", message=account_balance_response
-			)
+			frappe.log_error("Mpesa Account Balance Processing Error", account_balance_response)
 	else:
 		request.handle_failure(account_balance_response)
 
