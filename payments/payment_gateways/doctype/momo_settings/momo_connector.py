@@ -137,7 +137,7 @@ class MomoConnector:
         payload = {
             "amount": str(amount),  # MTN API requires string
             "currency": currency,
-            "externalId": external_id,
+            "externalId": external_id or reference_id,
             "payer": {
                 "partyIdType": "MSISDN",
                 "partyId": payer_msisdn,
