@@ -14,7 +14,7 @@ from payments.utils import create_payment_gateway
 
 
 class BraintreeSettings(Document):
-	supported_currencies = [
+	supported_currencies = (
 		"AED",
 		"AMD",
 		"AOA",
@@ -150,7 +150,7 @@ class BraintreeSettings(Document):
 		"ZAR",
 		"ZMK",
 		"ZWD",
-	]
+	)
 
 	def validate(self):
 		if not self.flags.ignore_mandatory:
@@ -271,7 +271,6 @@ class BraintreeSettings(Document):
 			("doctype", self.data.reference_doctype),
 			("docname", self.data.reference_docname),
 		]
-
 		if redirect_to:
 			get_parameters.append(("redirect_to", redirect_to))
 		if redirect_message:
