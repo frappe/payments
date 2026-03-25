@@ -1,7 +1,6 @@
 # Copyright (c) 2020, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
-import unittest
 from json import dumps
 
 import frappe
@@ -10,6 +9,7 @@ from erpnext.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_inv
 from erpnext.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
 from erpnext.accounts.doctype.pos_profile.test_pos_profile import make_pos_profile
 from erpnext.stock.doctype.item.test_item import make_item
+from erpnext.tests.utils import ERPNextTestSuite
 
 from payments.payment_gateways.doctype.mpesa_settings.mpesa_settings import (
 	create_mode_of_payment,
@@ -18,7 +18,11 @@ from payments.payment_gateways.doctype.mpesa_settings.mpesa_settings import (
 )
 
 
-class TestMpesaSettings(unittest.TestCase):
+class TestMpesaSettings(ERPNextTestSuite):
+	@ERPNextTestSuite.change_settings(
+		"Global Defaults",
+		{"default_company": "Wind Power LLC"},
+	)
 	def setUp(self):
 		# create payment gateway in setup
 		create_mpesa_settings(payment_gateway_name="_Test")
