@@ -109,9 +109,34 @@
   padding: 10rem;
 }
 
+#card-errors {
+  clear: both;
+  color: #fa755a;
+}
+
 @media (max-width: 48rem) {
   #payment-section {
     padding: 0rem;
     min-height: 70vh;
-  },
+  }
+
+  .stripe label {
+    height: auto;
+    line-height: normal;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stripe label > span {
+    width: 100%;
+    margin-bottom: 6px;
+  }
+
+   .field {
+    width: 100%;
+  }
+
+  #card-errors {
+    margin-top: 6px;
+  }
 }
