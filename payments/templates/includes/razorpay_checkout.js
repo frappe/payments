@@ -7,13 +7,13 @@ $(document).ready(function(){
 			"name": "{{ title }}",
 			"description": "{{ description }}",
 			"subscription_id": "{{ subscription_id }}",
+			"order_id": "{{ order_id }}",
 			"handler": function (response){
 				razorpay.make_payment_log(response, options, "{{ reference_doctype }}", "{{ reference_docname }}", "{{ token }}");
 			},
 			"prefill": {
 				"name": "{{ payer_name }}",
-				"email": "{{ payer_email }}",
-				"order_id": "{{ order_id }}"
+				"email": "{{ payer_email }}"
 			},
 			"notes": {{ frappe.form_dict|json }}
 		};

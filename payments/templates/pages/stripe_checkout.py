@@ -1,6 +1,8 @@
 # Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and Contributors
 # License: MIT. See LICENSE
 import json
+from frappe.integrations.doctype.stripe_settings.stripe_settings import get_gateway_controller
+from frappe.utils import cint, fmt_money
 
 import frappe
 from frappe import _
@@ -49,6 +51,10 @@ def get_context(context):
 			context["amount"] = context["amount"] + " " + _(recurrence)
 
 	else:
+		frappe.log_error(
+			"Missing keys in form_dict",
+			"Expected keys: {}," "Received keys: {}".format(expected_keys, list(frappe.form_dict)),
+		)
 		frappe.redirect_to_message(
 			_("Some information is missing"),
 			_("Looks like someone sent you to an incomplete URL. Please ask them to look into it."),
@@ -67,6 +73,7 @@ def get_api_key(doc, gateway_controller):
 
 def get_header_image(doc, gateway_controller):
 	return frappe.db.get_value("Stripe Settings", gateway_controller, "header_img")
+
 
 
 @frappe.whitelist(allow_guest=True)

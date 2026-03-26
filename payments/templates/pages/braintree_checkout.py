@@ -12,6 +12,11 @@ from payments.payment_gateways.doctype.braintree_settings.braintree_settings imp
 	get_gateway_controller,
 )
 
+from payments.payment_gateways.doctype.braintree_settings.braintree_settings import (
+	get_client_token,
+	get_gateway_controller,
+)
+
 no_cache = 1
 
 expected_keys = (
@@ -40,9 +45,7 @@ def get_context(context):
 		context["amount"] = flt(context["amount"])
 
 		gateway_controller = get_gateway_controller(context.reference_docname)
-		context["header_img"] = frappe.db.get_value(
-			"Braintree Settings", gateway_controller, "header_img"
-		)
+		context["header_img"] = frappe.db.get_value("Braintree Settings", gateway_controller, "header_img")
 
 	else:
 		frappe.redirect_to_message(
