@@ -64,6 +64,7 @@ More Details:
 
 import json
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 import frappe
 import pytz
@@ -78,8 +79,15 @@ from payments.utils import create_payment_gateway
 api_path = "/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
 
 
+from payments.utils import create_payment_gateway
+
+api_path = (
+	"/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
+)
+
+
 class PayPalSettings(Document):
-	supported_currencies = [
+	supported_currencies = (
 		"AUD",
 		"BRL",
 		"CAD",
@@ -105,14 +113,14 @@ class PayPalSettings(Document):
 		"THB",
 		"TRY",
 		"USD",
-	]
+	)
 
 	def __setup__(self):
-		setattr(self, "use_sandbox", 0)
+		self.use_sandbox = 0
 
 	def setup_sandbox_env(self, token):
 		data = json.loads(frappe.db.get_value("Integration Request", token, "data"))
-		setattr(self, "use_sandbox", cint(frappe._dict(data).use_sandbox) or 0)
+		self.use_sandbox = cint(frappe._dict(data).use_sandbox) or 0
 
 	def validate(self):
 		create_payment_gateway("PayPal")
@@ -171,7 +179,7 @@ class PayPalSettings(Document):
 			frappe.throw(_("Invalid payment gateway credentials"))
 
 	def get_payment_url(self, **kwargs):
-		setattr(self, "use_sandbox", cint(kwargs.get("use_sandbox", 0)))
+		self.use_sandbox = cint(kwargs.get("use_sandbox", 0))
 
 		response = self.execute_set_express_checkout(**kwargs)
 
@@ -212,9 +220,55 @@ class PayPalSettings(Document):
 		response = make_post_request(url, data=params.encode("utf-8"))
 
 		if response.get("ACK")[0] != "Success":
+			create_request_log(response, service_name="PayPal", status="Failed")
 			frappe.throw(_("Looks like something is wrong with this site's Paypal configuration."))
 
 		return response
+
+	def configure_recurring_payments(self, params, kwargs):
+		# removing the params as we have to setup rucurring payments
+		for param in (
+			"PAYMENTREQUEST_0_PAYMENTACTION",
+			"PAYMENTREQUEST_0_AMT",
+			"PAYMENTREQUEST_0_CURRENCYCODE",
+		):
+			del params[param]
+
+		params.update(
+			{
+				"L_BILLINGTYPE0": "RecurringPayments",  # The type of billing agreement
+				"L_BILLINGAGREEMENTDESCRIPTION0": kwargs["description"],
+			}
+		)
+
+
+def get_paypal_and_transaction_details(token):
+	doc = frappe.get_doc("PayPal Settings")
+	doc.setup_sandbox_env(token)
+	params, url = doc.get_paypal_params_and_url()
+
+	integration_request = frappe.get_doc("Integration Request", token)
+	data = json.loads(integration_request.data)
+
+	return data, params, url
+
+
+def setup_redirect(data, redirect_url, custom_redirect_to=None, redirect=True):
+	redirect_to = data.get("redirect_to") or None
+	redirect_message = data.get("redirect_message") or None
+
+	if custom_redirect_to:
+		redirect_to = custom_redirect_to
+
+	if redirect_to:
+		redirect_url += "&" + urlencode({"redirect_to": redirect_to})
+	if redirect_message:
+		redirect_url += "&" + urlencode({"redirect_message": redirect_message})
+
+	# this is done so that functions called via hooks can update flags.redirect_to
+	if redirect:
+		frappe.local.response["type"] = "redirect"
+		frappe.local.response["location"] = get_url(redirect_url)
 
 	def configure_recurring_payments(self, params, kwargs):
 		# removing the params as we have to setup rucurring payments
@@ -379,7 +433,7 @@ def create_recurring_profile(token, payerid):
 		status_changed_to = "Completed" if data.get("starting_immediately") or updating else "Verified"
 
 		starts_at = get_datetime(subscription_details.get("start_date")) or frappe.utils.now_datetime()
-		starts_at = starts_at.replace(tzinfo=pytz.timezone(get_system_timezone())).astimezone(pytz.utc)
+		starts_at = starts_at.replace(tzinfo=ZoneInfo(get_system_timezone())).astimezone(ZoneInfo("UTC"))
 
 		# "PROFILESTARTDATE": datetime.utcfromtimestamp(get_timestamp(starts_at)).isoformat()
 		params.update({"PROFILESTARTDATE": starts_at.isoformat()})
@@ -430,6 +484,7 @@ def get_redirect_uri(doc, token, payerid):
 		return get_url(f"{api_path}.create_recurring_profile?token={token}&payerid={payerid}")
 	else:
 		return get_url(f"{api_path}.confirm_payment?token={token}")
+
 
 
 def manage_recurring_payment_profile_status(profile_id, action, args, url):

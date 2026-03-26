@@ -267,10 +267,7 @@ class BraintreeSettings(Document):
 			status = "Error"
 			redirect_url = "payment-failed"
 
-		get_parameters = [
-			("doctype", self.data.reference_doctype),
-			("docname", self.data.reference_docname),
-		]
+		get_parameters = [("doctype", self.data.reference_doctype), ("docname", self.data.reference_docname)]
 		if redirect_to:
 			get_parameters.append(("redirect_to", redirect_to))
 		if redirect_message:
@@ -282,9 +279,8 @@ class BraintreeSettings(Document):
 
 def get_gateway_controller(doc):
 	payment_request = frappe.get_doc("Payment Request", doc)
-	return frappe.db.get_value(
-		"Payment Gateway", payment_request.payment_gateway, "gateway_controller"
-	)
+	return frappe.db.get_value("Payment Gateway", payment_request.payment_gateway, "gateway_controller")
+
 
 
 def get_client_token(doc):

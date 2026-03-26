@@ -21,9 +21,7 @@ class GoCardlessSettings(Document):
 	def initialize_client(self):
 		self.environment = self.get_environment()
 		try:
-			self.client = gocardless_pro.Client(
-				access_token=self.access_token, environment=self.environment
-			)
+			self.client = gocardless_pro.Client(access_token=self.access_token, environment=self.environment)
 			return self.client
 		except Exception as e:
 			frappe.throw(e)
@@ -124,9 +122,7 @@ class GoCardlessSettings(Document):
 		redirect_to = self.data.get("redirect_to") or None
 		redirect_message = self.data.get("redirect_message") or None
 
-		reference_doc = frappe.get_doc(
-			self.data.get("reference_doctype"), self.data.get("reference_docname")
-		)
+		reference_doc = frappe.get_doc(self.data.get("reference_doctype"), self.data.get("reference_docname"))
 		self.initialize_client()
 
 		try:
@@ -205,9 +201,7 @@ class GoCardlessSettings(Document):
 
 def get_gateway_controller(doc):
 	payment_request = frappe.get_doc("Payment Request", doc)
-	return frappe.db.get_value(
-		"Payment Gateway", payment_request.payment_gateway, "gateway_controller"
-	)
+	return frappe.db.get_value("Payment Gateway", payment_request.payment_gateway, "gateway_controller")
 
 
 def gocardless_initialization(doc):

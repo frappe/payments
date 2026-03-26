@@ -43,7 +43,7 @@ def get_context(context):
 			payment_details["subscription_id"] if payment_details.get("subscription_id") else ""
 		)
 
-	except Exception as e:
+	except Exception:
 		frappe.redirect_to_message(
 			_("Invalid Token"),
 			_("Seems token you are using is invalid!"),

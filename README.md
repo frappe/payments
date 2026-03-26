@@ -27,7 +27,9 @@ All general utils are stored in [utils](payments/utils) directory. The utils are
 
 [templates](payments/templates) directory has all the payment gateways' custom checkout pages.
 
-#
+## Ongoing Work
+- New API design: https://github.com/frappe/payments/pull/53
+- Mollie Integration: https://github.com/frappe/payments/pull/68 (awaiting the former, but you may use the branc)
 
 ## License
 MIT ([license.txt](license.txt))
