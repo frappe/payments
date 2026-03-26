@@ -45,9 +45,6 @@ jobs:
       - name: Clone
         uses: actions/checkout@v4
 
-      - name: Install MariaDB Client
-        run: sudo apt-get -y install mariadb-client
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:

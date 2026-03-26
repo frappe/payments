@@ -217,11 +217,6 @@ class RazorpaySettings(Document):
 			secret = self.get_password(fieldname="api_secret", raise_exception=False)
 			self.client = razorpay.Client(auth=(self.api_key, secret))
 
-	def init_client(self):
-		if self.api_key:
-			secret = self.get_password(fieldname="api_secret", raise_exception=False)
-			self.client = razorpay.Client(auth=(self.api_key, secret))
-
 	def validate(self):
 		create_payment_gateway("Razorpay")
 		call_hook_method("payment_gateway_enabled", gateway="Razorpay")
