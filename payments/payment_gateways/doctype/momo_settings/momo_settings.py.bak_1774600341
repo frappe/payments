@@ -104,101 +104,74 @@ class MoMoSettings(Document):
 @frappe.whitelist()
 def finalize_webshop_order(token, reference_id):
     """
-    Called after polling confirms MTN payment is Completed.
-    Flow: SO (To Deliver) -> PR (Paid) -> PE (against SO)
-    SI is created from SO by warehouse staff after delivery.
+    Called after polling confirms payment is Completed.
+    Creates SO → PE (against SO) → SI → reconcile PE to SI.
     """
     import json
 
     raw = frappe.cache().get_value(f"momo_pending_{token}")
     if not raw:
-        frappe.log_error(
-            f"Token: {token}\nRef: {reference_id}",
-            "MoMo Finalize: Token Missing"
-        )
+        frappe.log_error(f"Token expired: {token}, ref: {reference_id}", "MoMo Finalize: Token Missing")
         return {"error": "Session expired. Contact support with ref: " + reference_id}
 
-    cart_data = json.loads(raw)  # plain dict — NOT frappe._dict
-    pr_name     = cart_data.get("payment_request")
+    cart_data = json.loads(raw)  # plain dict — avoid frappe._dict to prevent .items() conflict
+    pr_name    = cart_data.get("payment_request")
     paid_amount = float(cart_data.get("grand_total") or 0)
-    quotation   = cart_data.get("quotation_name")
 
-    # DUPLICATE GUARD: only skip if SO already has a submitted PE
+    # ── DUPLICATE GUARD ──────────────────────────────────────────
     existing_so = frappe.db.get_value(
         "Sales Order",
-        {"po_no": quotation, "docstatus": 1},
+        {"po_no": cart_data.get("quotation_name"), "docstatus": 1},
         "name"
     )
     if existing_so:
-        has_pe = frappe.db.exists("Payment Entry Reference", {
-            "reference_doctype": "Sales Order",
-            "reference_name": existing_so,
-        })
-        if has_pe:
-            frappe.cache().delete_value(f"momo_pending_{token}")
-            return {"sales_order": existing_so}
+        frappe.cache().delete_value(f"momo_pending_{token}")
+        return {"sales_order": existing_so}
 
     original_user = frappe.session.user
     try:
         frappe.set_user("Administrator")
 
-        # 1. SALES ORDER
-        if not existing_so:
-            so = frappe.new_doc("Sales Order")
-            so.customer         = cart_data["customer"]
-            so.company          = cart_data["company"]
-            so.currency         = cart_data["currency"]
-            so.delivery_date    = frappe.utils.nowdate()
-            so.transaction_date = frappe.utils.nowdate()
-            so.order_type       = "Sales"
-            so.po_no            = quotation
+        # ── 1. SALES ORDER ───────────────────────────────────────
+        so = frappe.new_doc("Sales Order")
+        so.customer           = cart_data["customer"]
+        so.company            = cart_data["company"]
+        so.currency           = cart_data["currency"]
+        so.delivery_date      = frappe.utils.nowdate()
+        so.transaction_date   = frappe.utils.nowdate()
+        so.order_type         = "Sales"
+        so.po_no              = cart_data.get("quotation_name")
 
-            if cart_data.get("shipping_address_name"):
-                so.shipping_address_name = cart_data["shipping_address_name"]
-            if cart_data.get("customer_address"):
-                so.customer_address = cart_data["customer_address"]
+        if cart_data.get("shipping_address_name"):
+            so.shipping_address_name = cart_data["shipping_address_name"]
+        if cart_data.get("customer_address"):
+            so.customer_address = cart_data["customer_address"]
 
-            for item in cart_data.get("items") or []:
-                so.append("items", {
-                    "item_code": item["item_code"],
-                    "qty":       item.get("qty", 1),
-                    "rate":      item.get("rate", 0),
-                    "warehouse": item.get("warehouse"),
-                    "uom":       item.get("uom"),
-                })
-            for tax in cart_data.get("taxes") or []:
-                so.append("taxes", {
-                    "charge_type":  tax.get("charge_type", "On Net Total"),
-                    "account_head": tax["account_head"],
-                    "description":  tax.get("description") or tax["account_head"],
-                    "rate":         tax.get("rate", 0),
-                })
-
-            so.flags.ignore_permissions = True
-            so.insert()
-            so.submit()
-            frappe.db.commit()
-        else:
-            so = frappe.get_doc("Sales Order", existing_so)
-
-        frappe.log_error(f"SO: {so.name}", "MoMo Finalize: Step 1 OK")
-
-        # 2. PAYMENT REQUEST: mark Paid, link to SO
-        if pr_name and frappe.db.exists("Payment Request", pr_name):
-            frappe.db.set_value("Payment Request", pr_name, {
-                "reference_doctype": "Sales Order",
-                "reference_name":    so.name,
-                "status":            "Paid",
+        for item in cart_data.get("items") or []:
+            so.append("items", {
+                "item_code": item["item_code"],
+                "qty":       item.get("qty", 1),
+                "rate":      item.get("rate", 0),
+                "warehouse": item.get("warehouse"),
+                "uom":       item.get("uom"),
             })
-            frappe.db.commit()
 
-        frappe.log_error(f"PR: {pr_name}", "MoMo Finalize: Step 2 OK")
+        for tax in cart_data.get("taxes") or []:
+            so.append("taxes", {
+                "charge_type":  tax.get("charge_type", "On Net Total"),
+                "account_head": tax["account_head"],
+                "description":  tax.get("description") or tax["account_head"],
+                "rate":         tax.get("rate", 0),
+            })
 
-        # 3. PAYMENT ENTRY against SO
-        gw_full = (
-            frappe.db.get_value("Payment Request", pr_name, "payment_gateway")
-            if pr_name else ""
-        )
+        so.flags.ignore_permissions = True
+        so.insert()
+        so.submit()
+        frappe.db.commit()
+        frappe.log_error(f"SO created: {so.name}", "MoMo Finalize: Step 1 OK")
+
+        # ── 2. PAYMENT ENTRY (against unbilled SO) ───────────────
+        gw_full = frappe.db.get_value("Payment Request", pr_name, "payment_gateway") if pr_name else ""
         pga = frappe.db.get_value(
             "Payment Gateway Account",
             {"payment_gateway": gw_full},
@@ -207,21 +180,14 @@ def finalize_webshop_order(token, reference_id):
         ) if gw_full else None
 
         receivable_account = (
-            frappe.db.get_value("Party Account", {
-                "parenttype": "Customer",
-                "parent":     so.customer,
-                "company":    so.company,
-            }, "account")
-            or frappe.db.get_value("Account", {
-                "account_type": "Receivable",
-                "company":      so.company,
-                "is_group":     0,
-            }, "name")
+            frappe.db.get_value("Party Account",
+                {"parenttype": "Customer", "parent": so.customer, "company": so.company},
+                "account")
+            or frappe.db.get_value("Account",
+                {"account_type": "Receivable", "company": so.company, "is_group": 0},
+                "name")
             or frappe.db.get_value("Company", so.company, "default_receivable_account")
         )
-
-        if not pga or not pga.payment_account:
-            frappe.throw(f"Payment Gateway Account not configured for {gw_full}")
 
         pe = frappe.new_doc("Payment Entry")
         pe.payment_type               = "Receive"
@@ -232,7 +198,7 @@ def finalize_webshop_order(token, reference_id):
         pe.party_name                 = so.customer_name
         pe.paid_from                  = receivable_account
         pe.paid_from_account_currency = so.currency
-        pe.paid_to                    = pga.payment_account
+        pe.paid_to                    = pga.payment_account if pga else ""
         pe.paid_to_account_currency   = so.currency
         pe.paid_amount                = paid_amount
         pe.received_amount            = paid_amount
@@ -240,10 +206,8 @@ def finalize_webshop_order(token, reference_id):
         pe.target_exchange_rate       = 1
         pe.reference_no               = reference_id
         pe.reference_date             = frappe.utils.nowdate()
-        pe.remarks = (
-            f"MoMo payment received.\n"
-            f"PR: {pr_name} | SO: {so.name} | MTN Ref: {reference_id}"
-        )
+        pe.remarks = f"MoMo payment. PR: {pr_name}, SO: {so.name}, MTN Ref: {reference_id}"
+
         pe.append("references", {
             "reference_doctype":  "Sales Order",
             "reference_name":     so.name,
@@ -251,35 +215,82 @@ def finalize_webshop_order(token, reference_id):
             "total_amount":       so.grand_total,
             "outstanding_amount": so.grand_total,
         })
+
         pe.flags.ignore_permissions = True
         pe.insert()
         pe.submit()
         frappe.db.commit()
+        frappe.log_error(f"PE created: {pe.name}", "MoMo Finalize: Step 2 OK")
 
-        frappe.log_error(f"PE: {pe.name}", "MoMo Finalize: Step 3 OK")
+        # ── 3. SALES INVOICE ─────────────────────────────────────
+        from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
+        si = make_sales_invoice(so.name)
+        si.flags.ignore_permissions = True
+        si.insert()
+        si.submit()
+        frappe.db.commit()
+        frappe.log_error(f"SI created: {si.name}", "MoMo Finalize: Step 3 OK")
 
-        # 4. SUBMIT QUOTATION so the cart is cleared and cannot be reused
+        # ── 4. RECONCILE PE → SI ─────────────────────────────────
         try:
-            quot = frappe.get_doc("Quotation", quotation)
+            # Remove SO ref row directly in DB (avoids submitted doc validation)
+            frappe.db.delete("Payment Entry Reference", {
+                "parent":               pe.name,
+                "reference_doctype":    "Sales Order",
+                "reference_name":       so.name,
+            })
+            # Insert SI ref row directly
+            frappe.db.sql("""
+                INSERT INTO `tabPayment Entry Reference`
+                    (name, parent, parenttype, parentfield,
+                     reference_doctype, reference_name,
+                     allocated_amount, total_amount, outstanding_amount)
+                VALUES (%s, %s, 'Payment Entry', 'references',
+                        'Sales Invoice', %s, %s, %s, %s)
+            """, (
+                frappe.generate_hash(length=10),
+                pe.name, si.name,
+                paid_amount, si.grand_total, si.grand_total,
+            ))
+            frappe.db.commit()
+            frappe.log_error(f"PE reconciled to SI {si.name}", "MoMo Finalize: Step 4 OK")
+
+        except Exception:
+            frappe.log_error(frappe.get_traceback(), "MoMo Finalize: reconcile failed (non-critical)")
+
+        # ── 5. FORCE SI TO PAID ──────────────────────────────────
+        frappe.db.set_value("Sales Invoice", si.name, {
+            "outstanding_amount": 0,
+            "status": "Paid",
+        })
+
+        # ── 6. UPDATE PR ─────────────────────────────────────────
+        if pr_name and frappe.db.exists("Payment Request", pr_name):
+            frappe.db.set_value("Payment Request", pr_name, {
+                "reference_doctype": "Sales Order",
+                "reference_name":    so.name,
+                "status":            "Paid",
+            })
+
+        # ── 7. SUBMIT QUOTATION (clears cart) ────────────────────
+        try:
+            quot = frappe.get_doc("Quotation", cart_data.get("quotation_name"))
             if quot.docstatus == 0:
                 quot.flags.ignore_permissions = True
                 quot.submit()
-                frappe.db.commit()
-            frappe.log_error(f"Quotation {quotation} submitted", "MoMo Finalize: Step 4 OK")
         except Exception:
-            frappe.log_error(frappe.get_traceback(), "MoMo Finalize: quotation submit (non-critical)")
+            frappe.log_error(frappe.get_traceback(), "MoMo Finalize: quotation submit failed (non-critical)")
 
+        frappe.db.commit()
         frappe.cache().delete_value(f"momo_pending_{token}")
-        frappe.log_error(f"SO: {so.name} | PE: {pe.name}", "MoMo Finalize: COMPLETE")
 
-        return {"sales_order": so.name, "payment_entry": pe.name}
+        return {"sales_order": so.name, "sales_invoice": si.name}
 
     except Exception:
         frappe.log_error(frappe.get_traceback(), "MoMo Webshop Finalize Error")
         return {"error": "Order creation failed. Contact support with ref: " + reference_id}
     finally:
         frappe.set_user(original_user)
-
 
 @frappe.whitelist()
 def generate_payment_url(payment_request_name):
@@ -499,6 +510,238 @@ def initiate_webshop_payment(token, gateway_name, phone):
 
 
 @frappe.whitelist()
+def finalize_webshop_order(token, reference_id):
+    """
+    Called after polling confirms payment is Completed.
+    Creates SO → SI → PE from the cached cart data.
+    """
+    import json
+    raw = frappe.cache().get_value(f"momo_pending_{token}")
+    if not raw:
+        # Try to recover from Integration Request
+        ir = frappe.db.get_value("Integration Request", reference_id,
+                                  ["reference_docname"], as_dict=True)
+        if ir:
+            frappe.log_error("MoMo webshop: token expired but IR found", "Webshop Finalize")
+        return {"error": "Session data not found. Check your email for order confirmation."}
+
+    cart_data = frappe._dict(json.loads(raw))
+    pr_name = cart_data.get("payment_request")
+    paid_amount = float(cart_data.get("grand_total") or 0)
+
+    # DUPLICATE GUARD
+    existing_so = frappe.db.get_value(
+        "Sales Order",
+        {"po_no": cart_data.quotation_name, "docstatus": 1},
+        "name"
+    )
+    if existing_so:
+        frappe.cache().delete_value(f"momo_pending_{token}")
+        return {"sales_order": existing_so}
+
+    original_user = frappe.session.user
+    try:
+        frappe.set_user("Administrator")
+
+        # 1. Create Sales Order from cart data
+        so = frappe.new_doc("Sales Order")
+        so.customer = cart_data.customer
+        so.company = cart_data.company
+        so.currency = cart_data.currency
+        so.delivery_date = frappe.utils.nowdate()
+        so.transaction_date = frappe.utils.nowdate()
+        so.order_type = "Sales"
+        so.po_no = cart_data.quotation_name  # link back to quotation
+
+        if cart_data.get("shipping_address_name"):
+            so.shipping_address_name = cart_data.shipping_address_name
+        if cart_data.get("customer_address"):
+            so.customer_address = cart_data.customer_address
+
+        for item in cart_data.get("items") or []:
+            so.append("items", {
+                "item_code": item.get("item_code") if isinstance(item, dict) else item["item_code"],
+                "qty": item.get("qty", 1) if isinstance(item, dict) else item["qty"],
+                "rate": item.get("rate", 0) if isinstance(item, dict) else item["rate"],
+                "warehouse": item.get("warehouse") if isinstance(item, dict) else item.get("warehouse"),
+                "uom": item.get("uom") if isinstance(item, dict) else item.get("uom"),
+            })
+
+        for tax in cart_data.get("taxes") or []:
+            so.append("taxes", {
+                "charge_type": tax.get("charge_type", "On Net Total"),
+                "account_head": tax.get("account_head"),
+                "description": tax.get("description") or tax.get("account_head") or "",
+                "rate": tax.get("rate", 0),
+            })
+
+        so.flags.ignore_permissions = True
+        so.insert()
+        so.submit()
+
+        # 2. Update Payment Request to reference SO
+        if pr_name and frappe.db.exists("Payment Request", pr_name):
+            frappe.db.set_value("Payment Request", pr_name, {
+                "reference_doctype": "Sales Order",
+                "reference_name": so.name,
+                "status": "Paid",
+            })
+
+        # 3. Create Payment Entry FIRST (against the unbilled SO)
+        pe = None
+        if pr_name and frappe.db.exists("Payment Request", pr_name):
+            pr_doc = frappe.get_doc("Payment Request", pr_name)
+            # Update PR to reference the SO so create_payment_entry works
+            frappe.db.set_value("Payment Request", pr_name, {
+                "reference_doctype": "Sales Order",
+                "reference_name": so.name,
+                "status": "Paid",
+            })
+            pr_doc.reload()
+            try:
+                pe = pr_doc.create_payment_entry(submit=True)
+            except Exception:
+                # Fallback: create PE manually
+                frappe.log_error(frappe.get_traceback(), "MoMo: PR.create_payment_entry failed, using manual PE")
+                pe = None
+
+        # If PR method failed, create PE manually against SO
+        if not pe:
+            gw_full = frappe.db.get_value("Payment Request", pr_name, "payment_gateway") if pr_name else ""
+            pga = frappe.db.get_value(
+                "Payment Gateway Account",
+                {"payment_gateway": gw_full},
+                ["payment_account", "currency"],
+                as_dict=True,
+            ) if gw_full else None
+
+            pe = frappe.new_doc("Payment Entry")
+            pe.payment_type = "Receive"
+            pe.posting_date = frappe.utils.nowdate()
+            pe.company = so.company
+            pe.party_type = "Customer"
+            pe.party = so.customer
+            pe.paid_amount = paid_amount or float(so.grand_total)
+            pe.received_amount = pe.paid_amount
+            pe.target_exchange_rate = 1
+            pe.source_exchange_rate = 1
+            pe.reference_no = pr_name or so.name
+            pe.reference_date = frappe.utils.nowdate()
+            pe.remarks = f"MoMo payment for {so.name}"
+            if pga:
+                pe.paid_to = pga.payment_account
+            pe.paid_from = frappe.db.get_value(
+                "Company", so.company, "default_receivable_account"
+            ) or frappe.db.get_value(
+                "Account",
+                {"account_type": "Receivable", "company": so.company, "is_group": 0},
+                "name"
+            )
+            pe.append("references", {
+                "reference_doctype": "Sales Order",
+                "reference_name": so.name,
+                "allocated_amount": pe.paid_amount,
+                "total_amount": so.grand_total,
+                "outstanding_amount": so.grand_total,
+            })
+            pe.flags.ignore_permissions = True
+            pe.insert()
+            pe.submit()
+
+        # 4. Create Sales Invoice AFTER PE
+        from erpnext.selling.doctype.sales_order.sales_order import make_sales_invoice
+        si = make_sales_invoice(so.name)
+        si.flags.ignore_permissions = True
+        si.insert()
+        si.submit()
+
+        # 5. Reconcile PE → SI using ERPNext's reconcile utility
+        if pe:
+            try:
+                pe.reload()
+                
+                # Remove SO reference, add SI reference
+                pe.flags.ignore_permissions = True
+                pe.flags.ignore_validate_update_after_submit = True
+                pe.references = []
+                pe.append("references", {
+                    "reference_doctype": "Sales Invoice",
+                    "reference_name": si.name,
+                    "allocated_amount": paid_amount,
+                    "total_amount": si.grand_total,
+                    "outstanding_amount": si.grand_total,
+                })
+                pe.save()
+                frappe.db.commit()
+
+            except Exception:
+                frappe.log_error(frappe.get_traceback(), "MoMo finalize: PE.save() reconcile failed — trying direct SQL")
+                # Fallback: direct DB reconcile
+                try:
+                    # Remove old SO reference row
+                    frappe.db.delete("Payment Entry Reference", {
+                        "parent": pe.name,
+                        "reference_doctype": "Sales Order",
+                    })
+                    # Insert SI reference row directly
+                    ref_doc = frappe.new_doc("Payment Entry Reference")
+                    ref_doc.parent = pe.name
+                    ref_doc.parenttype = "Payment Entry"
+                    ref_doc.parentfield = "references"
+                    ref_doc.reference_doctype = "Sales Invoice"
+                    ref_doc.reference_name = si.name
+                    ref_doc.allocated_amount = paid_amount
+                    ref_doc.total_amount = si.grand_total
+                    ref_doc.outstanding_amount = si.grand_total
+                    ref_doc.flags.ignore_permissions = True
+                    ref_doc.db_insert()
+                    frappe.db.commit()
+                except Exception:
+                    frappe.log_error(frappe.get_traceback(), "MoMo finalize: direct SQL reconcile also failed")
+
+            # Either way, force the SI to Paid status
+            try:
+                paid_via_pe = frappe.db.sql("""
+                    SELECT COALESCE(SUM(per.allocated_amount), 0)
+                    FROM `tabPayment Entry Reference` per
+                    JOIN `tabPayment Entry` pe ON pe.name = per.parent
+                    WHERE per.reference_doctype = 'Sales Invoice'
+                    AND per.reference_name = %s
+                    AND pe.docstatus = 1
+                """, si.name)[0][0]
+
+                outstanding = max(0, float(si.grand_total) - float(paid_via_pe))
+                status = "Paid" if outstanding == 0 else "Partly Paid" if paid_via_pe > 0 else "Unpaid"
+                frappe.db.set_value("Sales Invoice", si.name, {
+                    "outstanding_amount": outstanding,
+                    "status": status,
+                })
+                frappe.db.commit()
+            except Exception:
+                frappe.log_error(frappe.get_traceback(), "MoMo finalize: SI status update failed")
+
+        # Submit the original quotation so cart clears
+        try:
+            quot = frappe.get_doc("Quotation", cart_data.quotation_name)
+            if quot.docstatus == 0:
+                quot.flags.ignore_permissions = True
+                quot.submit()
+        except Exception:
+            pass
+
+        frappe.db.commit()
+
+        # Clear cache token
+        frappe.cache().delete_value(f"momo_pending_{token}")
+
+        return {"sales_order": so.name, "sales_invoice": si.name}
+
+    except Exception:
+        frappe.log_error(frappe.get_traceback(), "MoMo Webshop Finalize Error")
+        return {"error": "Order creation failed. Please contact support with reference: " + reference_id}
+    finally:
+        frappe.set_user(original_user)
+
 @frappe.whitelist()
 def poll_webshop_transaction(reference_id, gateway_name=None):
     """
@@ -557,86 +800,3 @@ def poll_webshop_transaction(reference_id, gateway_name=None):
     except Exception:
         frappe.log_error(frappe.get_traceback(), "MoMo poll_webshop_transaction Error")
         return {"status": "PENDING"}  # don't surface errors to frontend, just keep polling
-
-
-def on_sales_invoice_submit(doc, method=None):
-    """
-    Triggered when a Sales Invoice is submitted.
-    If the SI was created from a Sales Order that has a MoMo Payment Entry,
-    automatically relinks the PE from the SO to the SI and marks SI as Paid.
-    """
-    # Find all SOs linked to this SI
-    so_names = list(set(
-        row.sales_order
-        for row in doc.get("items") or []
-        if row.get("sales_order")
-    ))
-    if not so_names:
-        return
-
-    for so_name in so_names:
-        # Find a submitted PE referencing this SO
-        pe_ref = frappe.db.get_value(
-            "Payment Entry Reference",
-            {
-                "reference_doctype": "Sales Order",
-                "reference_name":    so_name,
-            },
-            ["parent", "allocated_amount"],
-            as_dict=True,
-        )
-        if not pe_ref:
-            continue
-
-        pe_name      = pe_ref.parent
-        paid_amount  = float(pe_ref.allocated_amount or 0)
-
-        # Confirm PE is submitted
-        pe_status = frappe.db.get_value("Payment Entry", pe_name, "docstatus")
-        if pe_status != 1:
-            continue
-
-        try:
-            # Remove old SO reference row directly in DB
-            frappe.db.delete("Payment Entry Reference", {
-                "parent":               pe_name,
-                "reference_doctype":    "Sales Order",
-                "reference_name":       so_name,
-            })
-
-            # Insert SI reference row directly
-            frappe.db.sql("""
-                INSERT INTO `tabPayment Entry Reference`
-                    (name, parent, parenttype, parentfield,
-                     reference_doctype, reference_name,
-                     allocated_amount, total_amount, outstanding_amount)
-                VALUES (%s, %s, 'Payment Entry', 'references',
-                        'Sales Invoice', %s, %s, %s, %s)
-            """, (
-                frappe.generate_hash(length=10),
-                pe_name,
-                doc.name,
-                paid_amount,
-                doc.grand_total,
-                doc.grand_total,
-            ))
-
-            # Force SI to Paid
-            outstanding = max(0.0, float(doc.grand_total) - paid_amount)
-            status = "Paid" if outstanding == 0 else "Partly Paid"
-            frappe.db.set_value("Sales Invoice", doc.name, {
-                "outstanding_amount": outstanding,
-                "status":             status,
-            })
-
-            frappe.db.commit()
-            frappe.log_error(
-                f"PE {pe_name} relinked from SO {so_name} to SI {doc.name}",
-                "MoMo: SI Auto-Reconcile OK"
-            )
-
-        except Exception:
-            frappe.log_error(
-                frappe.get_traceback(),
-                f"MoMo: SI Auto-Reconcile Failed — PE {pe_name} / SI {doc.name}"
-            )

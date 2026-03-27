@@ -1,102 +1,431 @@
 {% extends "templates/web.html" %}
 
 {% block page_content %}
-<div class="checkout-container" style="max-width: 400px; margin: 50px auto;">
-    <h3>MTN Mobile Money Payment</h3>
-    <p class="text-muted">Payment for: <strong>{{ title or payment_request_name }}</strong></p>
+<style>
+    * { box-sizing: border-box; }
+    .momo-wrap {
+        max-width: 460px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+    }
+    .momo-card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.10);
+        padding: 2rem 2rem 1.5rem;
+        text-align: center;
+    }
+    .momo-logo { width: 72px; margin-bottom: 0.75rem; }
+    .momo-title { color: #001D6E; font-weight: 700; font-size: 1.3rem; margin: 0 0 0.25rem; }
+    .momo-subtitle { color: #666; font-size: 0.9rem; margin-bottom: 0.5rem; }
+    .momo-amount {
+        font-size: 2rem; font-weight: 800;
+        color: #001D6E; margin: 0.5rem 0 1rem;
+        letter-spacing: -1px;
+    }
+    hr { border: none; border-top: 1px solid #eee; margin: 1rem 0; }
+
+    .form-label { display: block; text-align: left; font-weight: 600; color: #333; margin-bottom: 0.35rem; font-size: 0.9rem; }
+    .momo-input {
+        width: 100%; padding: 0.75rem 1rem;
+        border: 2px solid #ddd; border-radius: 8px;
+        font-size: 1.05rem; transition: border-color 0.2s;
+        outline: none;
+    }
+    .momo-input:focus { border-color: #FFB300; box-shadow: 0 0 0 3px rgba(255,179,0,0.15); }
+    .input-hint { text-align: left; font-size: 0.8rem; color: #888; margin-top: 0.3rem; }
+
+    .btn-pay {
+        width: 100%; padding: 0.85rem;
+        background: #FFB300; border: none; border-radius: 8px;
+        color: #001D6E; font-weight: 700; font-size: 1.1rem;
+        cursor: pointer; transition: all 0.2s; margin-top: 1rem;
+        letter-spacing: 0.3px;
+    }
+    .btn-pay:hover:not(:disabled) { background: #E6A300; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(255,179,0,0.4); }
+    .btn-pay:disabled { background: #FFD966; cursor: not-allowed; opacity: 0.8; }
+    .btn-cancel {
+        width: 100%; padding: 0.6rem;
+        background: transparent; border: 2px solid #ddd; border-radius: 8px;
+        color: #666; font-weight: 600; font-size: 0.95rem;
+        cursor: pointer; transition: all 0.2s; margin-top: 0.5rem;
+        display: none;
+    }
+    .btn-cancel:hover { border-color: #e74c3c; color: #e74c3c; }
+
+    /* Status panel */
+    #status-panel { display: none; margin-top: 1rem; }
+    .status-icon { font-size: 2.5rem; margin-bottom: 0.5rem; }
+    .status-title { font-weight: 700; font-size: 1.1rem; margin-bottom: 0.25rem; }
+    .status-sub { font-size: 0.85rem; color: #555; }
+
+    /* Spinner */
+    .spinner {
+        width: 48px; height: 48px;
+        border: 5px solid #f0f0f0;
+        border-top-color: #FFB300;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+        margin: 0 auto 0.75rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Progress bar */
+    .progress-wrap { background: #f0f0f0; border-radius: 99px; height: 6px; margin: 0.75rem 0; overflow: hidden; }
+    .progress-bar { height: 100%; background: #FFB300; border-radius: 99px; transition: width 5s linear; width: 0%; }
+
+    /* Timer */
+    .timer-text { font-size: 0.8rem; color: #888; margin-top: 0.25rem; }
+
+    /* Alerts */
+    .alert { padding: 0.75rem 1rem; border-radius: 8px; font-size: 0.9rem; text-align: left; margin-top: 0.75rem; }
+    .alert-success { background: #d4edda; color: #155724; border-left: 4px solid #28a745; }
+    .alert-danger  { background: #f8d7da; color: #721c24; border-left: 4px solid #dc3545; }
+    .alert-warning { background: #fff3cd; color: #856404; border-left: 4px solid #ffc107; }
+    .alert-info    { background: #d1ecf1; color: #0c5460; border-left: 4px solid #17a2b8; }
+
+    .footer-note { font-size: 0.78rem; color: #aaa; margin-top: 1.25rem; }
+
+    /* Step indicators */
+    .steps { display: flex; justify-content: space-between; margin: 1rem 0 0.5rem; }
+    .step { flex: 1; text-align: center; position: relative; }
+    .step:not(:last-child)::after {
+        content: ''; position: absolute;
+        top: 12px; left: 60%; width: 80%;
+        height: 2px; background: #eee;
+    }
+    .step.done::after { background: #FFB300; }
+    .step-dot {
+        width: 24px; height: 24px; border-radius: 50%;
+        background: #eee; color: #aaa;
+        font-size: 0.7rem; font-weight: 700;
+        display: flex; align-items: center; justify-content: center;
+        margin: 0 auto 0.25rem;
+    }
+    .step.active .step-dot { background: #FFB300; color: #001D6E; }
+    .step.done .step-dot { background: #28a745; color: #fff; }
+    .step-label { font-size: 0.7rem; color: #888; }
+    .step.active .step-label { color: #001D6E; font-weight: 600; }
+    .step.done .step-label { color: #28a745; }
+</style>
+
+<div class="momo-wrap">
+  <div class="momo-card">
+    <img src="/assets/payments/images/mtn-logo.png" alt="MTN MoMo" class="momo-logo"
+         onerror="this.style.display='none'">
+    <h2 class="momo-title">MTN Mobile Money</h2>
+    <p class="momo-subtitle">{{ title or "Complete Your Payment" }}</p>
+    <div class="momo-amount">{{ currency }} {{ "{:,.0f}".format(amount | float) }}</div>
+
     <hr>
-    
-    <div class="form-group">
-        <label for="momo_number">Enter MTN Phone Number</label>
-        <input type="text" id="momo_number" class="form-control" placeholder="e.g. 237670543260" required>
-        <small class="form-text text-muted">Include country code without "+" (e.g., 237 for Cameroon).</small>
+
+    <!-- Step indicators -->
+    <div class="steps">
+      <div class="step active" id="step1">
+        <div class="step-dot">1</div>
+        <div class="step-label">Enter Number</div>
+      </div>
+      <div class="step" id="step2">
+        <div class="step-dot">2</div>
+        <div class="step-label">Confirm on Phone</div>
+      </div>
+      <div class="step" id="step3">
+        <div class="step-dot">3</div>
+        <div class="step-label">Done</div>
+      </div>
     </div>
 
-    <div class="mt-4">
-        <button id="pay_btn" class="btn btn-primary btn-block">Confirm & Pay: {{ currency }} {{ amount }}</button>
+    <hr>
+
+    <!-- Input section -->
+    <div id="input-section">
+      <label class="form-label" for="momo_number">MTN Phone Number</label>
+      <input type="tel" id="momo_number" class="momo-input"
+             placeholder="670 543 260  or  237 670 543 260"
+             autocomplete="tel" inputmode="numeric">
+      <p class="input-hint">The MTN number that will receive the payment prompt.</p>
+
+      <button id="pay_btn" class="btn-pay">
+        Pay {{ currency }} {{ "{:,.0f}".format(amount | float) }}
+      </button>
     </div>
-    
-    <div id="response_msg" class="mt-3 text-center" style="display:none;"></div>
+
+    <!-- Status panel (shown after Pay clicked) -->
+    <div id="status-panel">
+      <div id="spinner-wrap">
+        <div class="spinner"></div>
+        <div class="status-title" id="status-title">Sending request...</div>
+        <div class="status-sub" id="status-sub">Please wait</div>
+        <div class="progress-wrap"><div class="progress-bar" id="progress-bar"></div></div>
+        <div class="timer-text" id="timer-text">0s elapsed</div>
+      </div>
+
+      <div id="result-wrap" style="display:none;">
+        <div class="status-icon" id="result-icon"></div>
+        <div class="status-title" id="result-title"></div>
+        <div class="status-sub" id="result-sub"></div>
+      </div>
+
+      <div id="inline-alert"></div>
+      <button class="btn-cancel" id="cancel_btn">Stop waiting / Try again</button>
+    </div>
+
+    <div class="footer-note">
+      🔒 Secure payment via MTN MoMo &nbsp;·&nbsp; You'll enter your PIN on your phone
+    </div>
+  </div>
 </div>
 
 <script>
-frappe.ready(function() {
-    let retry_count = 0;
-    const max_retries = 12; // 12 * 5 seconds = 60 seconds total
+frappe.ready(function () {
+    /* ── Constants from server ── */
+    const TOKEN    = {{ token | tojson }};
+    const GATEWAY  = {{ gateway_name | tojson }};
+    const AMOUNT   = {{ amount | tojson }};
+    const CURRENCY = {{ currency | tojson }};
 
-    $("#pay_btn").click(function() {
-        const sender = $("#momo_number").val();
-        if (!sender) {
-            frappe.msgprint(__("Please enter your phone number"));
+    /* ── Polling config ── */
+    const POLL_INTERVAL_MS  = 4000;   // check every 4 seconds
+    const MAX_POLL_SECONDS  = 120;    // give up after 2 minutes
+    const MAX_POLLS         = Math.ceil(MAX_POLL_SECONDS * 1000 / POLL_INTERVAL_MS);
+
+    /* ── State ── */
+    let pollTimer    = null;
+    let pollCount    = 0;
+    let elapsedSec   = 0;
+    let timerTick    = null;
+    let currentRefId = null;
+    let cancelled    = false;
+
+    /* ── DOM refs ── */
+    const $payBtn      = $("#pay_btn");
+    const $cancelBtn   = $("#cancel_btn");
+    const $inputSec    = $("#input-section");
+    const $statusPanel = $("#status-panel");
+    const $spinnerWrap = $("#spinner-wrap");
+    const $resultWrap  = $("#result-wrap");
+    const $progBar     = $("#progress-bar");
+    const $timerText   = $("#timer-text");
+    const $statusTitle = $("#status-title");
+    const $statusSub   = $("#status-sub");
+
+    /* ────────────────────────────────────────────────────────── */
+    /*  PAY BUTTON                                                */
+    /* ────────────────────────────────────────────────────────── */
+    $payBtn.on("click", function () {
+        const raw    = $("#momo_number").val().trim();
+        const digits = raw.replace(/\D/g, "");
+        if (digits.length < 9) {
+            showInlineAlert("danger", "Please enter a valid MTN number (e.g. 670 543 260).");
             return;
         }
 
-        const btn = $(this);
-        btn.prop("disabled", true).text(__("Check your phone..."));
+        cancelled = false;
+        showStatusPanel();
+        setStep(2);
+        setSpinner("Sending payment request…", "Check your phone in a moment");
 
         frappe.call({
-            method: "payments.payment_gateways.doctype.momo_settings.momo_settings.request_for_payment_by_gateway",
-            args: {
-                gateway_name: "{{ gateway_name }}",
-                request_amount: "{{ amount }}",
-                currency: "{{ currency }}",
-                sender: sender,
-                order_id: "{{ order_id }}",
-                reference_doctype: "{{ reference_doctype }}",
-                reference_docname: "{{ reference_docname }}"
-            },
-            callback: function(r) {
-                if (r.message && r.message.referenceId) {
-                    // Start polling for the status of this specific referenceId
-                    start_polling(r.message.referenceId);
+            method: "payments.payment_gateways.doctype.momo_settings.momo_settings.initiate_webshop_payment",
+            args: { token: TOKEN, gateway_name: GATEWAY, phone: raw },
+            callback: function (r) {
+                if (cancelled) return;
+                if (r.message && r.message.reference_id) {
+                    currentRefId = r.message.reference_id;
+                    setSpinner(
+                        "Waiting for your PIN…",
+                        "A prompt has been sent to your phone. Enter your MoMo PIN to confirm."
+                    );
+                    showInlineAlert("info", "📱 Check your phone now and enter your MoMo PIN.");
+                    $cancelBtn.show();
+                    startPolling(currentRefId);
                 } else {
-                    btn.prop("disabled", false).text(__("Try Again"));
-                    frappe.msgprint(__("Could not initiate payment. Please check your number."));
+                    const msg = (r.message && r.message.error) || "Could not send the payment request.";
+                    onFailure(msg);
                 }
+            },
+            error: function () {
+                if (!cancelled) onFailure("Server error. Please try again.");
             }
         });
     });
 
-    function start_polling(reference_id) {
-        $("#response_msg").show().html('<div class="alert alert-info">Awaiting PIN entry on your phone...</div>');
-        
-        const interval = setInterval(function() {
-            retry_count++;
+    /* ────────────────────────────────────────────────────────── */
+    /*  CANCEL BUTTON                                             */
+    /* ────────────────────────────────────────────────────────── */
+    $cancelBtn.on("click", function () {
+        cancelled = true;
+        stopPolling();
+        resetToInput();
+        showInlineAlert("warning", "Payment stopped. Enter your number again to retry.");
+    });
+
+    /* ────────────────────────────────────────────────────────── */
+    /*  POLLING LOOP                                              */
+    /* ────────────────────────────────────────────────────────── */
+    function startPolling(referenceId) {
+        pollCount  = 0;
+        elapsedSec = 0;
+        startTimer();
+
+        pollTimer = setInterval(function () {
+            if (cancelled) { stopPolling(); return; }
+            pollCount++;
+
+            /* Animate progress bar per poll cycle */
+            const pct = Math.min((pollCount / MAX_POLLS) * 100, 100);
+            $progBar.css("width", pct + "%");
 
             frappe.call({
-                method: "frappe.client.get_value",
-                args: {
-                    doctype: "Integration Request",
-                    filters: { name: reference_id },
-                    fieldname: "status"
-                },
-                callback: function(r) {
-                    const status = r.message.status;
+                method: "payments.payment_gateways.doctype.momo_settings.momo_settings.poll_webshop_transaction",
+                args: { reference_id: referenceId, gateway_name: GATEWAY },
+                callback: function (r) {
+                    if (cancelled) return;
+                    const status = r.message && r.message.status;
 
-                    if (status === "Completed" || status === "Success") {
-                        clearInterval(interval);
-                        $("#response_msg").html('<div class="alert alert-success">Payment Successful! Redirecting...</div>');
-                        // Redirect back to the Invoice/Portal after 2 seconds
-                        setTimeout(() => {
-                            window.location.href = "/me/payments"; 
-                        }, 2000);
-                    } 
-                    else if (status === "Failed") {
-                        clearInterval(interval);
-                        $("#pay_btn").prop("disabled", false).text(__("Try Again"));
-                        $("#response_msg").html('<div class="alert alert-danger">Payment Failed or Cancelled.</div>');
+                    if (status === "SUCCESSFUL") {
+                        stopPolling();
+                        setStep(3);
+                        showInlineAlert("success", "✅ Payment confirmed!");
+                        setSpinner("Creating your order…", "Almost done, please wait.");
+
+                        frappe.call({
+                            method: "payments.payment_gateways.doctype.momo_settings.momo_settings.finalize_webshop_order",
+                            args: { token: TOKEN, reference_id: referenceId },
+                            callback: function (fr) {
+                                if (fr.message && fr.message.sales_order) {
+                                    onSuccess(fr.message.sales_order);
+                                } else {
+                                    /* Payment OK but order creation had issues */
+                                    showResult("⚠️", "Payment received!", "Your order is being processed. You'll receive a confirmation email shortly.");
+                                    showInlineAlert("warning", fr.message && fr.message.error ? fr.message.error : "");
+                                }
+                            }
+                        });
+
+                    } else if (status === "FAILED") {
+                        stopPolling();
+                        onFailure("Payment was declined or cancelled by MTN. Please try again.");
+
+                    } else if (status === "TIMEOUT" || pollCount >= MAX_POLLS) {
+                        stopPolling();
+                        onTimeout();
                     }
-                    
-                    // Handle Timeout
-                    if (retry_count >= max_retries) {
-                        clearInterval(interval);
-                        $("#pay_btn").prop("disabled", false).text(__("Try Again"));
-                        $("#response_msg").html('<div class="alert alert-warning">Transaction timed out. If you paid, please check your invoice in a few minutes.</div>');
-                    }
+                    /* PENDING — keep polling */
                 }
             });
-        }, 5000); // Check every 5 seconds
+        }, POLL_INTERVAL_MS);
     }
+
+    function stopPolling() {
+        clearInterval(pollTimer);
+        clearInterval(timerTick);
+        pollTimer  = null;
+        timerTick  = null;
+    }
+
+    /* ────────────────────────────────────────────────────────── */
+    /*  TIMER TICK                                                */
+    /* ────────────────────────────────────────────────────────── */
+    function startTimer() {
+        elapsedSec = 0;
+        $timerText.text("0s elapsed · " + MAX_POLL_SECONDS + "s timeout");
+        timerTick = setInterval(function () {
+            elapsedSec++;
+            const remaining = MAX_POLL_SECONDS - elapsedSec;
+            $timerText.text(elapsedSec + "s elapsed · " + Math.max(0, remaining) + "s remaining");
+        }, 1000);
+    }
+
+    /* ────────────────────────────────────────────────────────── */
+    /*  OUTCOME HANDLERS                                          */
+    /* ────────────────────────────────────────────────────────── */
+    function onSuccess(soName) {
+        showResult("✅", "Order placed!", "Redirecting to your order…");
+        setTimeout(function () {
+            window.location.href = "/orders?doctype=Sales+Order&name=" + soName;
+        }, 2000);
+    }
+
+    function onFailure(msg) {
+        stopPolling();
+        showResult("❌", "Payment failed", msg || "Something went wrong.");
+        showInlineAlert("danger", msg || "");
+        setTimeout(resetToInput, 3500);
+    }
+
+    function onTimeout() {
+        showResult("⏱️", "Timed out", "We didn't receive confirmation. If you completed the payment, check your email or contact support.");
+        showInlineAlert("warning", "If you entered your PIN, the payment may still complete. Check your MoMo balance or contact support.");
+        $cancelBtn.show().text("Try again");
+        $cancelBtn.off("click").on("click", function () {
+            cancelled = true;
+            resetToInput();
+            showInlineAlert("info", "Enter your number to try again.");
+        });
+    }
+
+    /* ────────────────────────────────────────────────────────── */
+    /*  UI HELPERS                                                */
+    /* ────────────────────────────────────────────────────────── */
+    function showStatusPanel() {
+        $inputSec.hide();
+        $statusPanel.show();
+        $spinnerWrap.show();
+        $resultWrap.hide();
+        $("#inline-alert").empty();
+        $cancelBtn.hide().text("Stop waiting / Try again");
+        $progBar.css("width", "0%");
+    }
+
+    function resetToInput() {
+        stopPolling();
+        $statusPanel.hide();
+        $inputSec.show();
+        $progBar.css("width", "0%");
+        $("#inline-alert").empty();
+        setStep(1);
+    }
+
+    function setSpinner(title, sub) {
+        $spinnerWrap.show();
+        $resultWrap.hide();
+        $statusTitle.text(title);
+        $statusSub.text(sub);
+    }
+
+    function showResult(icon, title, sub) {
+        $spinnerWrap.hide();
+        $resultWrap.show();
+        $("#result-icon").text(icon);
+        $("#result-title").text(title);
+        $("#result-sub").text(sub);
+    }
+
+    function showInlineAlert(type, msg) {
+        if (!msg) return;
+        $("#inline-alert").html(
+            '<div class="alert alert-' + type + '">' + msg + '</div>'
+        );
+    }
+
+    function setStep(n) {
+        [1, 2, 3].forEach(function (i) {
+            const $s = $("#step" + i);
+            $s.removeClass("active done");
+            if (i < n) $s.addClass("done").find(".step-dot").html("✓");
+            else if (i === n) $s.addClass("active").find(".step-dot").text(i);
+            else $s.find(".step-dot").text(i);
+        });
+    }
+
+    /* Auto-focus the input */
+    $("#momo_number").focus();
+
+    /* Allow Enter key to submit */
+    $("#momo_number").on("keydown", function (e) {
+        if (e.key === "Enter") $payBtn.trigger("click");
+    });
 });
 </script>
 {% endblock %}

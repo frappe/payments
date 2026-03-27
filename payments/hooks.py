@@ -29,11 +29,7 @@ app_license = "MIT"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
 doctype_js = {"Payment Request": "public/js/payment_request.js"}
-# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
-# doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
-# doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
 # Home Pages
 # ----------
@@ -43,7 +39,7 @@ doctype_js = {"Payment Request": "public/js/payment_request.js"}
 
 # website user home page (by Role)
 # role_home_page = {
-# 	"Role": "home_page"
+#     "Role": "home_page"
 # }
 
 # Generators
@@ -57,8 +53,8 @@ doctype_js = {"Payment Request": "public/js/payment_request.js"}
 
 # add methods and filters to jinja environment
 # jinja = {
-# 	"methods": "pay.utils.jinja_methods",
-# 	"filters": "pay.utils.jinja_filters"
+#     "methods": "pay.utils.jinja_methods",
+#     "filters": "pay.utils.jinja_filters"
 # }
 
 # Installation
@@ -71,53 +67,45 @@ after_install = "payments.utils.make_custom_fields"
 # ------------
 
 before_uninstall = "payments.utils.delete_custom_fields"
-# after_uninstall = "pay.uninstall.after_uninstall"
 
 # Desk Notifications
 # ------------------
 # See frappe.core.notifications.get_notification_config
-
 # notification_config = "pay.notifications.get_notification_config"
 
 # Permissions
 # -----------
-# Permissions evaluated in scripted ways
-
 # permission_query_conditions = {
-# 	"Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
+#     "Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
 # }
 #
 # has_permission = {
-# 	"Event": "frappe.desk.doctype.event.event.has_permission",
+#     "Event": "frappe.desk.doctype.event.event.has_permission",
 # }
 
 # DocType Class
 # ---------------
-# Extend standard doctype classes
 
 extend_doctype_class = {"Web Form": "payments.overrides.payment_webform.PaymentWebForm"}
 
 # Document Events
 # ---------------
-# Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+    "Sales Invoice": {
+        "on_submit": "payments.payment_gateways.doctype.momo_settings.momo_settings.on_sales_invoice_submit",
+    }
+}
 
 # Scheduled Tasks
 # ---------------
 
 scheduler_events = {
-	"all": [
-		"payments.payment_gateways.doctype.razorpay_settings.razorpay_settings.capture_payment",
-	],
-	"hourly": [
-     "payments.payment_gateways.doctype.momo_settings.momo_settings.poll_pending_transactions",
+    "all": [
+        "payments.payment_gateways.doctype.razorpay_settings.razorpay_settings.capture_payment",
+    ],
+    "hourly": [
+        "payments.payment_gateways.doctype.momo_settings.momo_settings.poll_pending_transactions",
     ],
 }
 
@@ -128,58 +116,26 @@ before_tests = "erpnext.setup.utils.before_tests"  # To setup company and accoun
 
 # Overriding Methods
 # ------------------------------
-#
+
 override_whitelisted_methods = {
-	"frappe.website.doctype.web_form.web_form.accept": "payments.overrides.payment_webform.accept"
+    "frappe.website.doctype.web_form.web_form.accept": "payments.overrides.payment_webform.accept"
 }
-#
-# each overriding function accepts a `data` argument;
-# generated from the base implementation of the doctype dashboard,
-# along with any modifications made in other Frappe apps
-# override_doctype_dashboards = {
-# 	"Task": "pay.task.get_dashboard_data"
-# }
-
-# exempt linked doctypes from being automatically cancelled
-#
-# auto_cancel_exempted_doctypes = ["Auto Repeat"]
-
 
 # User Data Protection
 # --------------------
 
 # user_data_fields = [
-# 	{
-# 		"doctype": "{doctype_1}",
-# 		"filter_by": "{filter_by}",
-# 		"redact_fields": ["{field_1}", "{field_2}"],
-# 		"partial": 1,
-# 	},
-# 	{
-# 		"doctype": "{doctype_2}",
-# 		"filter_by": "{filter_by}",
-# 		"partial": 1,
-# 	},
-# 	{
-# 		"doctype": "{doctype_3}",
-# 		"strict": False,
-# 	},
-# 	{
-# 		"doctype": "{doctype_4}"
-# 	}
+#     {
+#         "doctype": "{doctype_1}",
+#         "filter_by": "{filter_by}",
+#         "redact_fields": ["{field_1}", "{field_2}"],
+#         "partial": 1,
+#     }
 # ]
 
 # Authentication and authorization
 # --------------------------------
 
 # auth_hooks = [
-# 	"pay.auth.validate"
+#     "pay.auth.validate"
 # ]
-
-# Translation
-# --------------------------------
-
-# Make link fields search translated document names for these DocTypes
-# Recommended only for DocTypes which have limited documents with untranslated names
-# For example: Role, Gender, etc.
-# translated_search_doctypes = []
