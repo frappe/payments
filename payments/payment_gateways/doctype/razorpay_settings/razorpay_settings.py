@@ -214,7 +214,7 @@ class RazorpaySettings(Document):
 
 		# Setup payment options
 		payment_options = {
-			"amount": kwargs.get("amount"),
+			"amount": round(kwargs.get("amount")),
 			"currency": kwargs.get("currency", "INR"),
 			"receipt": kwargs.get("receipt"),
 			"payment_capture": kwargs.get("payment_capture"),
