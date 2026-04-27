@@ -1,8 +1,6 @@
 # Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and Contributors
 # License: MIT. See LICENSE
 import json
-from frappe.integrations.doctype.stripe_settings.stripe_settings import get_gateway_controller
-from frappe.utils import cint, fmt_money
 
 import frappe
 from frappe import _
