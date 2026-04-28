@@ -217,6 +217,7 @@ class BraintreeSettings(Document):
 			{
 				"amount": self.data.amount,
 				"payment_method_nonce": self.data.payload_nonce,
+				"order_id": self.data.order_id,  # already in self.data, just not passed
 				"options": {"submit_for_settlement": True},
 			}
 		)
