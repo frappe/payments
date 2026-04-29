@@ -144,6 +144,10 @@ def make_custom_fields():
 		frappe.clear_cache(doctype="Web Form")
 
 	if "erpnext" in frappe.get_installed_apps():
+		click.secho("* Installing Payment Custom Fields in GoCardless Mandate")
+		click.secho("* Installing Payment Custom Fields in Payment Gateway Account")
+		click.secho("* Installing Payment Custom Fields in Payment Gateway")
+
 		custom_fields = {
 			"GoCardless Mandate": [
 				{
@@ -155,7 +159,115 @@ def make_custom_fields():
 					"reqd": 1,
 					"insert_after": "disabled",
 				}
-			]
+			],
+			"Payment Gateway Account": [
+				{
+					"fieldname": "company",
+					"fieldtype": "Link",
+					"in_list_view": 1,
+					"label": "Company",
+					"options": "Company",
+					"reqd": 1,
+					"insert_after": "section_break_1",
+				},
+				{
+					"fieldname": "payment_account",
+					"fieldtype": "Link",
+					"in_list_view": 1,
+					"label": "Payment Account",
+					"options": "Account",
+					"reqd": 1,
+					"insert_after": "company",
+				},
+			],
+			"Payment Gateway": [
+				{
+					"fieldname": "pga_section",
+					"fieldtype": "Section Break",
+					"insert_after": "gateway_controller",
+				},
+				{
+					"fieldname": "payment_gateway_account",
+					"fieldtype": "Table",
+					"label": "Payment Gateway Account",
+					"options": "Payment Gateway Account",
+					"insert_after": "pga_section",
+				},
+			],
+			"Subscription Plan": [
+				{
+					"fieldname": "payment_gateway",
+					"fieldtype": "Link",
+					"label": "Payment Gateway",
+					"options": "Payment Gateway",
+					"insert_after": "column_break_16",
+				},
+				{
+					"fieldname": "payment_gateway_account",
+					"fieldtype": "Link",
+					"label": "Payment Gateway Account",
+					"options": "Payment Gateway Account",
+					"insert_after": "payment_gateway",
+				},
+			],
+			"Payment Request": [
+				{
+					"fieldname": "pg_details_section",
+					"fieldtype": "Section Break",
+					"insert_after": "section_break_10",
+				},
+				{
+					"fieldname": "payment_gateway",
+					"fieldtype": "Link",
+					"label": "Payment Gateway",
+					"options": "Payment Gateway",
+					"insert_after": "pg_details_section",
+				},
+				{
+					"fieldname": "payment_gateway_account",
+					"fieldtype": "Link",
+					"label": "Payment Gateway Account",
+					"options": "Payment Gateway Account",
+					"insert_after": "payment_gateway",
+				},
+				{
+					"fieldname": "payment_account",
+					"fieldtype": "Link",
+					"label": "Payment Account",
+					"options": "Account",
+					"read_only": 1,
+					"insert_after": "payment_gateway_account",
+				},
+				{
+					"fieldname": "payment_channel",
+					"fieldtype": "Select",
+					"label": "Payment Channel",
+					"options": "\nEmail\nPhone\nOther",
+					"read_only": 1,
+					"insert_after": "payment_account",
+				},
+				{
+					"fieldname": "column_break_pnyv",
+					"fieldtype": "Column Break",
+					"insert_after": "payment_channel",
+				},
+				{
+					"fieldname": "payment_url",
+					"fieldtype": "Data",
+					"label": "Payment URL",
+					"length": 500,
+					"options": "URL",
+					"read_only": 1,
+					"insert_after": "column_break_pnyv",
+				},
+				{
+					"fieldname": "phone_number",
+					"fieldtype": "Data",
+					"label": "Phone Number",
+					"options": "Phone",
+					"insert_after": "payment_url",
+				},
+			],
 		}
 
 		create_custom_fields(custom_fields)
