@@ -3,12 +3,16 @@
 
 frappe.ui.form.on("Payment Gateway", {
   onload: function (frm) {
-    frm.fields_dict.payment_gateway_account.grid.get_field("payment_account").get_query = (frm, cdt, cdn) => {
-      row = locals[cdt][cdn];
-      return {
-        filters: {
-          company: row.company,
-        }
+    if (frm.fields_dict.payment_gateway_account) {
+      frm.fields_dict.payment_gateway_account.grid.get_field(
+        "payment_account"
+      ).get_query = (frm, cdt, cdn) => {
+        const row = locals[cdt][cdn];
+        return {
+          filters: {
+            company: row.company,
+          },
+        };
       };
     }
   },

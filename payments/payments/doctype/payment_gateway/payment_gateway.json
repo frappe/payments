@@ -1,26 +1,16 @@
 {
  "actions": [],
- "autoname": "field:gateway",
+ "autoname": "field:gateway_name",
  "creation": "2022-01-24 21:09:47.229371",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "gateway",
+  "gateway_name",
   "gateway_settings",
-  "gateway_controller",
-  "section_break_ypzi",
-  "payment_gateway_account"
+  "gateway_controller"
  ],
  "fields": [
-  {
-   "fieldname": "gateway",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Gateway",
-   "reqd": 1,
-   "unique": 1
-  },
   {
    "fieldname": "gateway_settings",
    "fieldtype": "Link",
@@ -34,18 +24,16 @@
    "options": "gateway_settings"
   },
   {
-   "fieldname": "section_break_ypzi",
-   "fieldtype": "Section Break"
-  },
-  {
-   "fieldname": "payment_gateway_account",
-   "fieldtype": "Table",
-   "label": "Payment Gateway Account",
-   "options": "Payment Gateway Account"
+   "fieldname": "gateway_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Gateway Name",
+   "reqd": 1,
+   "unique": 1
   }
  ],
  "links": [],
- "modified": "2026-04-24 17:22:57.817821",
+ "modified": "2026-04-28 00:34:09.719665",
  "modified_by": "Administrator",
  "module": "Payments",
  "name": "Payment Gateway",
