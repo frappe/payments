@@ -28,21 +28,3 @@ class PaymentGatewayAccount(Document):
 	def validate(self):
 		if "erpnext" in frappe.get_installed_apps() and self.payment_account:
 			self.currency = frappe.get_cached_value("Account", self.payment_account, "account_currency")
-
-		self.update_default_payment_gateway_account()
-		self.set_as_default_if_not_set()
-
-	def update_default_payment_gateway_account(self):
-		if self.is_default:
-			frappe.db.set_value(
-				"Payment Gateway Account",
-				{"is_default": 1, "name": ["!=", self.name], "company": self.company},
-				"is_default",
-				0,
-			)
-
-	def set_as_default_if_not_set(self):
-		if not frappe.db.exists(
-			"Payment Gateway Account", {"is_default": 1, "name": ("!=", self.name), "company": self.company}
-		):
-			self.is_default = 1

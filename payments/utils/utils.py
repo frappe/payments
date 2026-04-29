@@ -59,6 +59,11 @@ def create_payment_gateway(gateway, settings=None, controller=None):
 		payment_gateway.insert(ignore_permissions=True)
 
 
+def after_install():
+	make_custom_fields()
+	make_custom_fields_erpnext()
+
+
 def make_custom_fields():
 	if not frappe.get_meta("Web Form").has_field("payments_tab"):
 		click.secho("* Installing Payment Custom Fields in Web Form")
@@ -143,10 +148,14 @@ def make_custom_fields():
 
 		frappe.clear_cache(doctype="Web Form")
 
+
+def make_custom_fields_erpnext():
 	if "erpnext" in frappe.get_installed_apps():
 		click.secho("* Installing Payment Custom Fields in GoCardless Mandate")
 		click.secho("* Installing Payment Custom Fields in Payment Gateway Account")
 		click.secho("* Installing Payment Custom Fields in Payment Gateway")
+		click.secho("* Installing Payment Custom Fields in Subscription Plan")
+		click.secho("* Installing Payment Custom Fields in Payment Request")
 
 		custom_fields = {
 			"GoCardless Mandate": [
@@ -212,16 +221,11 @@ def make_custom_fields():
 			],
 			"Payment Request": [
 				{
-					"fieldname": "pg_details_section",
-					"fieldtype": "Section Break",
-					"insert_after": "section_break_10",
-				},
-				{
 					"fieldname": "payment_gateway",
 					"fieldtype": "Link",
 					"label": "Payment Gateway",
 					"options": "Payment Gateway",
-					"insert_after": "pg_details_section",
+					"insert_after": "payment_details_section",
 				},
 				{
 					"fieldname": "payment_gateway_account",
@@ -231,19 +235,11 @@ def make_custom_fields():
 					"insert_after": "payment_gateway",
 				},
 				{
-					"fieldname": "payment_account",
-					"fieldtype": "Link",
-					"label": "Payment Account",
-					"options": "Account",
-					"read_only": 1,
-					"insert_after": "payment_gateway_account",
-				},
-				{
 					"fieldname": "payment_channel",
-					"fieldtype": "Select",
+					"fieldtype": "Data",
 					"label": "Payment Channel",
-					"options": "\nEmail\nPhone\nOther",
 					"read_only": 1,
+					"fetch_from": "payment_gateway_account.payment_channel",
 					"insert_after": "payment_account",
 				},
 				{
