@@ -69,7 +69,7 @@ after_install = "payments.utils.after_install"
 # Uninstallation
 # ------------
 
-before_uninstall = "payments.utils.delete_custom_fields"
+before_uninstall = "payments.utils.before_uninstall"
 # after_uninstall = "pay.uninstall.after_uninstall"
 
 # Desk Notifications
