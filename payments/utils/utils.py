@@ -51,7 +51,7 @@ def create_payment_gateway(gateway, settings=None, controller=None):
 		payment_gateway = frappe.get_doc(
 			{
 				"doctype": "Payment Gateway",
-				"gateway": gateway,
+				"gateway_name": gateway,
 				"gateway_settings": settings,
 				"gateway_controller": controller,
 			}
