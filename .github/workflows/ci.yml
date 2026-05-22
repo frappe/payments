@@ -8,12 +8,21 @@ on:
       - "**.md"
       - "**.html"
       - "**.csv"
-  schedule:
-    # Run everday at midnight UTC / 5:30 IST
-    - cron: "0 0 * * *"
+  workflow_dispatch:
+    inputs:
+      user:
+        description: 'Frappe Framework repository user (add your username for forks)'
+        required: true
+        default: 'frappe'
+        type: string
+      branch:
+        description: 'Frappe Framework branch'
+        default: 'version-15-hotfix'
+        required: false
+        type: string
 
 concurrency:
-  group: develop-${{ github.event.number }}
+  group: payments-ci-${{ github.event_name }}-${{ github.event.number || github.event_name == 'workflow_dispatch' && github.run_id || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -104,6 +113,8 @@ jobs:
         run: |
           bash ${GITHUB_WORKSPACE}/.github/helper/install.sh
         env:
+          DB: mariadb
+          TYPE: server
           FRAPPE_USER: ${{ github.event.inputs.user }}
           FRAPPE_BRANCH: ${{ github.event.inputs.branch }}
 
@@ -112,6 +123,10 @@ jobs:
         env:
           TYPE: server
           CAPTURE_COVERAGE: ${{ github.event_name != 'pull_request' }}
+
+      - name: Show bench output
+        if: ${{ always() }}
+        run: cat ~/frappe-bench/bench_start.log || true
 
       - name: Upload coverage data
         uses: actions/upload-artifact@v4

@@ -4,7 +4,7 @@ authors = [
     { name = "Frappe Technologies Pvt Ltd", email = "hello@frappe.io"}
 ]
 description = "Payments app for frappe"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.15"
 readme = "README.md"
 dynamic = ["version"]
 dependencies = [
@@ -14,7 +14,6 @@ dependencies = [
     "braintree~=4.20.0",
     "pycryptodome>=3.18.0,<4.0.0",
     "gocardless-pro~=1.22.0",
-    "setuptools==80.9.0",
 ]
 
 [build-system]
@@ -61,3 +60,6 @@ docstring-code-format = true
 [project.urls]
 Repository = "https://github.com/frappe/payments.git"
 "Bug Reports" = "https://github.com/frappe/payments/issues"
+
+[tool.bench.frappe-dependencies]
+frappe = ">=15.0.0,<16.0.0"
