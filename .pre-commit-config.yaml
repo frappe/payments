@@ -12,7 +12,7 @@ repos:
         exclude: ".*json$|.*txt$|.*csv|.*md|.*svg"
       - id: check-yaml
       - id: no-commit-to-branch
-        args: ['--branch', 'develop']
+        args: ['--branch', 'version-15-hotfix']
       - id: check-merge-conflict
       - id: check-ast
       - id: check-json
@@ -50,14 +50,11 @@ repos:
             )$
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.2.0
+    rev: v0.13.2
     hooks:
       - id: ruff
-        name: "Run ruff import sorter"
-        args: ["--select=I", "--fix"]
-
-      - id: ruff
-        name: "Run ruff linter"
+        name: "Run ruff linter and apply fixes"
+        args: ["--fix"]
 
       - id: ruff-format
         name: "Run ruff formatter"
