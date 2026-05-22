@@ -1,33 +1,37 @@
 # Copyright (c) 2020, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
-import unittest
 from json import dumps
+from unittest.mock import patch
 
 import frappe
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
 from erpnext.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_invoice
 from erpnext.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
 from erpnext.accounts.doctype.pos_profile.test_pos_profile import make_pos_profile
-from erpnext.stock.doctype.item.test_item import make_item
 
 from payments.payment_gateways.doctype.mpesa_settings.mpesa_settings import (
 	create_mode_of_payment,
 	process_balance_info,
 	verify_transaction,
 )
+from payments.tests.utils import PaymentsTestSuite
 
 
-class TestMpesaSettings(unittest.TestCase):
+@patch("payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.get_account_balance")
+@patch("payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.generate_stk_push")
+class TestMpesaSettings(PaymentsTestSuite):
 	def setUp(self):
+		self.enterContext(self.change_settings("Global Defaults", {"default_company": "Wind Power LLC"}))
+		self.enterContext(self.change_settings("POS Settings", {"invoice_type": "POS Invoice"}))
+
 		# create payment gateway in setup
 		create_mpesa_settings(payment_gateway_name="_Test")
 		create_mpesa_settings(payment_gateway_name="_Account Balance")
 		create_mpesa_settings(payment_gateway_name="Payment")
 
-		self.customer = create_customer("_Test Customer", "USD")
-		self.item = make_item(properties={"is_stock_item": 1}).name
-		pos_profile = make_pos_profile(
+		create_customer("_Test Customer KES", "KES")
+		self.pos_profile = make_pos_profile(
 			company="Wind Power LLC",
 			cost_center="Main - WP",
 			currency="USD",
@@ -39,23 +43,23 @@ class TestMpesaSettings(unittest.TestCase):
 			write_off_account="Write Off - WP",
 			write_off_cost_center="Main - WP",
 		)
-		self.pos_profile = pos_profile
 
 	def tearDown(self):
-		frappe.db.rollback()
+		super().tearDown()
 		for x in frappe.db.get_all("POS Opening Entry"):
 			frappe.get_doc("POS Opening Entry", x.name).cancel().delete()
 		frappe.db.sql("delete from `tabMpesa Settings`")
 		frappe.db.sql("delete from `tabIntegration Request` where integration_request_service = 'Mpesa'")
 
-	def test_creation_of_payment_gateway(self):
+	def test_creation_of_payment_gateway(self, mock_stk_push, mock_get_account_balance):
 		mode_of_payment = create_mode_of_payment("Mpesa-_Test", payment_type="Phone")
 		self.assertTrue(frappe.db.exists("Payment Gateway Account", {"payment_gateway": "Mpesa-_Test"}))
-		self.assertTrue(mode_of_payment.name)
 		self.assertEqual(mode_of_payment.type, "Phone")
 
-	def test_processing_of_account_balance(self):
-		mpesa_doc = create_mpesa_settings(payment_gateway_name="_Account Balance")
+	def test_processing_of_account_balance(self, mock_stk_push, mock_get_account_balance):
+		mock_get_account_balance.return_value = get_test_account_balance_response()
+
+		mpesa_doc = frappe.get_doc("Mpesa Settings", "_Account Balance")
 		mpesa_doc.get_account_balance_info()
 
 		callback_response = get_account_balance_callback_payload()
@@ -63,7 +67,6 @@ class TestMpesaSettings(unittest.TestCase):
 		integration_request = frappe.get_doc("Integration Request", "AG_20200927_00007cdb1f9fb6494315")
 
 		# test integration request creation and successful update of the status on receiving callback response
-		self.assertTrue(integration_request)
 		self.assertEqual(integration_request.status, "Completed")
 
 		# test formatting of account balance received as string to json with appropriate currency symbol
@@ -84,17 +87,22 @@ class TestMpesaSettings(unittest.TestCase):
 
 		integration_request.delete()
 
-	def test_processing_of_callback_payload(self):
+	@PaymentsTestSuite.change_settings(
+		"Accounts Settings", {"allow_multi_currency_invoices_against_single_party_account": 1}
+	)
+	def test_processing_of_callback_payload(self, mock_stk_push, mock_get_account_balance):
+		mock_stk_push.side_effect = lambda **kwargs: get_payment_request_response_payload(
+			kwargs["request_amount"]
+		)
+
 		create_opening_entry(self.pos_profile, frappe.session.user)
-		frappe.db.set_single_value("POS Settings", "invoice_type", "POS Invoice")
 		mpesa_account = frappe.db.get_value(
 			"Payment Gateway Account", {"payment_gateway": "Mpesa-Payment"}, "payment_account"
 		)
 		frappe.db.set_value("Account", mpesa_account, "account_currency", "KES")
-		frappe.db.set_value("Customer", "_Test Customer", "default_currency", "KES")
 		pos_invoice = create_pos_invoice(
-			item=self.item,
-			customer=self.customer,
+			item="_Test Item",
+			customer="_Test Customer KES",
 			debit_to="Debtors - WP",
 			warehouse="Stores - WP",
 			cost_center="Main - WP",
@@ -116,50 +124,50 @@ class TestMpesaSettings(unittest.TestCase):
 		# test payment request creation
 		self.assertEqual(pr.payment_gateway, "Mpesa-Payment")
 
-		# submitting payment request creates integration requests with random id
-		integration_req_ids = frappe.get_all(
+		integration_req_id = frappe.db.get_value(
 			"Integration Request",
-			filters={
+			{
 				"reference_doctype": pr.doctype,
 				"reference_docname": pr.name,
 			},
-			pluck="name",
+			"name",
 		)
 
-		callback_response = get_payment_callback_payload(Amount=500, CheckoutRequestID=integration_req_ids[0])
+		callback_response = get_payment_callback_payload(Amount=500, CheckoutRequestID=integration_req_id)
 		verify_transaction(**callback_response)
 		# test creation of integration request
-		integration_request = frappe.get_doc("Integration Request", integration_req_ids[0])
+		integration_request = frappe.get_doc("Integration Request", integration_req_id)
 
 		# test integration request creation and successful update of the status on receiving callback response
-		self.assertTrue(integration_request)
 		self.assertEqual(integration_request.status, "Completed")
 
 		pos_invoice.reload()
-		integration_request.reload()
 		self.assertEqual(pos_invoice.mpesa_receipt_number, "LGR7OWQX0R")
-		self.assertEqual(integration_request.status, "Completed")
 
-		frappe.db.set_value("Customer", "_Test Customer", "default_currency", "")
 		integration_request.delete()
 		pr.reload()
 		pr.cancel()
 		pr.delete()
 		pos_invoice.delete()
 
-	def test_processing_of_multiple_callback_payload(self):
+	@PaymentsTestSuite.change_settings(
+		"Accounts Settings", {"allow_multi_currency_invoices_against_single_party_account": 1}
+	)
+	def test_processing_of_multiple_callback_payload(self, mock_stk_push, mock_get_account_balance):
+		mock_stk_push.side_effect = lambda **kwargs: get_payment_request_response_payload(
+			kwargs["request_amount"]
+		)
+
 		create_opening_entry(self.pos_profile, frappe.session.user)
-		frappe.db.set_single_value("POS Settings", "invoice_type", "POS Invoice")
 		mpesa_account = frappe.db.get_value(
 			"Payment Gateway Account", {"payment_gateway": "Mpesa-Payment"}, "payment_account"
 		)
 		frappe.db.set_value("Account", mpesa_account, "account_currency", "KES")
 		frappe.db.set_value("Mpesa Settings", "Payment", "transaction_limit", "500")
-		frappe.db.set_value("Customer", "_Test Customer", "default_currency", "KES")
 
 		pos_invoice = create_pos_invoice(
-			item=self.item,
-			customer=self.customer,
+			item="_Test Item",
+			customer="_Test Customer KES",
 			debit_to="Debtors - WP",
 			warehouse="Stores - WP",
 			cost_center="Main - WP",
@@ -212,26 +220,31 @@ class TestMpesaSettings(unittest.TestCase):
 		pos_invoice.reload()
 		self.assertEqual(pos_invoice.mpesa_receipt_number, ", ".join(mpesa_receipt_numbers))
 
-		frappe.db.set_value("Customer", "_Test Customer", "default_currency", "")
-		[d.delete() for d in integration_requests]
+		for row in integration_requests:
+			row.delete()
 		pr.reload()
 		pr.cancel()
 		pr.delete()
 		pos_invoice.delete()
 
-	def test_processing_of_only_one_success_callback_payload(self):
+	@PaymentsTestSuite.change_settings(
+		"Accounts Settings", {"allow_multi_currency_invoices_against_single_party_account": 1}
+	)
+	def test_processing_of_only_one_success_callback_payload(self, mock_stk_push, mock_get_account_balance):
+		mock_stk_push.side_effect = lambda **kwargs: get_payment_request_response_payload(
+			kwargs["request_amount"]
+		)
+
 		create_opening_entry(self.pos_profile, frappe.session.user)
-		frappe.db.set_single_value("POS Settings", "invoice_type", "POS Invoice")
 		mpesa_account = frappe.db.get_value(
 			"Payment Gateway Account", {"payment_gateway": "Mpesa-Payment"}, "payment_account"
 		)
 		frappe.db.set_value("Account", mpesa_account, "account_currency", "KES")
 		frappe.db.set_value("Mpesa Settings", "Payment", "transaction_limit", "500")
-		frappe.db.set_value("Customer", "_Test Customer", "default_currency", "KES")
 
 		pos_invoice = create_pos_invoice(
-			item=self.item,
-			customer=self.customer,
+			item="_Test Item",
+			customer="_Test Customer KES",
 			debit_to="Debtors - WP",
 			warehouse="Stores - WP",
 			cost_center="Main - WP",
@@ -293,8 +306,9 @@ class TestMpesaSettings(unittest.TestCase):
 
 		self.assertEqual(len(new_integration_req_ids), 1)
 
-		frappe.db.set_value("Customer", "_Test Customer", "default_currency", "")
-		frappe.db.sql("delete from `tabIntegration Request` where integration_request_service = 'Mpesa'")
+		for integration_req_id in [*integration_req_ids, *new_integration_req_ids]:
+			frappe.delete_doc("Integration Request", integration_req_id)
+
 		pr.reload()
 		pr.cancel()
 		pr.delete()
@@ -306,17 +320,16 @@ def create_mpesa_settings(payment_gateway_name="Express"):
 		return frappe.get_doc("Mpesa Settings", payment_gateway_name)
 
 	doc = frappe.get_doc(
-		dict(  # nosec
-			doctype="Mpesa Settings",
-			sandbox=1,
-			payment_gateway_name=payment_gateway_name,
-			consumer_key="5sMu9LVI1oS3oBGPJfh3JyvLHwZOdTKn",
-			consumer_secret="VI1oS3oBGPJfh3JyvLHw",
-			online_passkey="LVI1oS3oBGPJfh3JyvLHwZOd",
-			till_number="174379",
-		)
+		{
+			"doctype": "Mpesa Settings",
+			"sandbox": 1,
+			"payment_gateway_name": payment_gateway_name,
+			"consumer_key": "5sMu9LVI1oS3oBGPJfh3JyvLHwZOdTKn",
+			"consumer_secret": "VI1oS3oBGPJfh3JyvLHw",
+			"online_passkey": "LVI1oS3oBGPJfh3JyvLHwZOd",
+			"till_number": "174379",
+		}
 	)
-
 	doc.insert(ignore_permissions=True)
 	return doc
 
