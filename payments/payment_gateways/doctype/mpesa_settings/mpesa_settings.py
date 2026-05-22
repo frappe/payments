@@ -53,15 +53,7 @@ class MpesaSettings(Document):
 
 		for _i, amount in enumerate(request_amounts):
 			args.request_amount = amount
-			if frappe.flags.in_test:
-				from payments.payment_gateways.doctype.mpesa_settings.test_mpesa_settings import (
-					get_payment_request_response_payload,
-				)
-
-				response = frappe._dict(get_payment_request_response_payload(amount))
-			else:
-				response = frappe._dict(generate_stk_push(**args))
-
+			response = frappe._dict(generate_stk_push(**args))
 			self.handle_api_response("CheckoutRequestID", args, response)
 
 	def split_request_amount_according_to_transaction_limit(self, args):
@@ -90,15 +82,7 @@ class MpesaSettings(Document):
 			reference_doctype="Mpesa Settings", reference_docname=self.name, doc_details=vars(self)
 		)
 
-		if frappe.flags.in_test:
-			from payments.payment_gateways.doctype.mpesa_settings.test_mpesa_settings import (
-				get_test_account_balance_response,
-			)
-
-			response = frappe._dict(get_test_account_balance_response())
-		else:
-			response = frappe._dict(get_account_balance(payload))
-
+		response = frappe._dict(get_account_balance(payload))
 		self.handle_api_response("ConversationID", payload, response)
 
 	def handle_api_response(self, global_id, request_dict, response):

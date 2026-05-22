@@ -4,13 +4,13 @@ on:
   pull_request:
   workflow_dispatch:
   push:
-    branches: [ develop ]
+    branches: [ version-16 ]
 
 permissions:
   contents: read
 
 concurrency:
-  group: commitcheck-frappe-${{ github.event.number }}
+  group: payments-linter-${{ github.event_name }}-${{ github.event.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -20,12 +20,12 @@ jobs:
     if: github.event_name == 'pull_request'
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 200
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: 16
+          node-version: 24
           check-latest: true
 
       - name: Check commit titles
@@ -39,16 +39,24 @@ jobs:
     if: github.event_name == 'pull_request'
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+
+      - name: Set up Python 3.14
+        uses: actions/setup-python@v6
         with:
-          python-version: '3.10'
-      - uses: pre-commit/action@v3.0.0
+          python-version: '3.14'
+
+      - name: Install and Run Pre-commit
+        uses: pre-commit/action@v3.0.0
 
       - name: Download Semgrep rules
         run: git clone --depth 1 https://github.com/frappe/semgrep-rules.git frappe-semgrep-rules
 
+      - name: Download semgrep
+        run: pip install semgrep
+
       - name: Run Semgrep rules
-        run: |
-          pip install semgrep==1.90.0
-          semgrep ci --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness
+        run: semgrep ci --config ./frappe-semgrep-rules/rules --config r/python.lang.correctness
+
+      - name: Semgrep for Test Correctness
+        run: semgrep ci --include=**/test_*.py --config ./semgrep/test-correctness.yml
