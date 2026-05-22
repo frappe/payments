@@ -51,7 +51,7 @@ def get_context(context):
 	else:
 		frappe.log_error(
 			"Missing keys in form_dict",
-			"Expected keys: {}," "Received keys: {}".format(expected_keys, list(frappe.form_dict)),
+			f"Expected keys: {expected_keys},Received keys: {list(frappe.form_dict)}",
 		)
 		frappe.redirect_to_message(
 			_("Some information is missing"),
@@ -73,11 +73,8 @@ def get_header_image(doc, gateway_controller):
 	return frappe.db.get_value("Stripe Settings", gateway_controller, "header_img")
 
 
-
 @frappe.whitelist(allow_guest=True)
-def make_payment(
-	stripe_token_id, data, reference_doctype=None, reference_docname=None, payment_gateway=None
-):
+def make_payment(stripe_token_id, data, reference_doctype=None, reference_docname=None, payment_gateway=None):
 	data = json.loads(data)
 
 	data.update({"stripe_token_id": stripe_token_id})

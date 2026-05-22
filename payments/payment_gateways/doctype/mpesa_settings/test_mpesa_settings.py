@@ -9,7 +9,7 @@ from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_cus
 from erpnext.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_invoice
 from erpnext.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
 from erpnext.accounts.doctype.pos_profile.test_pos_profile import make_pos_profile
-from frappe.tests.utils import FrappeTestCase
+from frappe.tests.utils import FrappeTestCase, change_settings
 
 from payments.payment_gateways.doctype.mpesa_settings.mpesa_settings import (
 	create_mode_of_payment,
@@ -22,8 +22,8 @@ from payments.payment_gateways.doctype.mpesa_settings.mpesa_settings import (
 @patch("payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.generate_stk_push")
 class TestMpesaSettings(FrappeTestCase):
 	def setUp(self):
-		self.enterContext(self.change_settings("Global Defaults", {"default_company": "Wind Power LLC"}))
-		self.enterContext(self.change_settings("POS Settings", {"invoice_type": "POS Invoice"}))
+		self.enterContext(change_settings("Global Defaults", {"default_company": "Wind Power LLC"}))
+		self.enterContext(change_settings("POS Settings", {"invoice_type": "POS Invoice"}))
 
 		# create payment gateway in setup
 		create_mpesa_settings(payment_gateway_name="_Test")
@@ -87,9 +87,7 @@ class TestMpesaSettings(FrappeTestCase):
 
 		integration_request.delete()
 
-	@FrappeTestCase.change_settings(
-		"Accounts Settings", {"allow_multi_currency_invoices_against_single_party_account": 1}
-	)
+	@change_settings("Accounts Settings", {"allow_multi_currency_invoices_against_single_party_account": 1})
 	def test_processing_of_callback_payload(self, mock_stk_push, mock_get_account_balance):
 		mock_stk_push.side_effect = lambda **kwargs: get_payment_request_response_payload(
 			kwargs["request_amount"]
@@ -150,9 +148,7 @@ class TestMpesaSettings(FrappeTestCase):
 		pr.delete()
 		pos_invoice.delete()
 
-	@FrappeTestCase.change_settings(
-		"Accounts Settings", {"allow_multi_currency_invoices_against_single_party_account": 1}
-	)
+	@change_settings("Accounts Settings", {"allow_multi_currency_invoices_against_single_party_account": 1})
 	def test_processing_of_multiple_callback_payload(self, mock_stk_push, mock_get_account_balance):
 		mock_stk_push.side_effect = lambda **kwargs: get_payment_request_response_payload(
 			kwargs["request_amount"]
@@ -227,9 +223,7 @@ class TestMpesaSettings(FrappeTestCase):
 		pr.delete()
 		pos_invoice.delete()
 
-	@FrappeTestCase.change_settings(
-		"Accounts Settings", {"allow_multi_currency_invoices_against_single_party_account": 1}
-	)
+	@change_settings("Accounts Settings", {"allow_multi_currency_invoices_against_single_party_account": 1})
 	def test_processing_of_only_one_success_callback_payload(self, mock_stk_push, mock_get_account_balance):
 		mock_stk_push.side_effect = lambda **kwargs: get_payment_request_response_payload(
 			kwargs["request_amount"]
