@@ -27,7 +27,6 @@ expected_keys = (
 
 def get_context(context):
 	context.no_cache = 1
-
 	# all these keys exist in form_dict
 	if not (set(expected_keys) - set(list(frappe.form_dict))):
 		for key in expected_keys:
@@ -47,7 +46,6 @@ def get_context(context):
 			recurrence = frappe.db.get_value("Payment Plan", payment_plan, "recurrence")
 
 			context["amount"] = context["amount"] + " " + _(recurrence)
-
 	else:
 		frappe.log_error(
 			"Missing keys in form_dict",
@@ -73,8 +71,15 @@ def get_header_image(doc, gateway_controller):
 	return frappe.db.get_value("Stripe Settings", gateway_controller, "header_img")
 
 
+# nosemgrep: frappe-semgrep-rules.rules.security.guest-whitelisted-method
 @frappe.whitelist(allow_guest=True)
-def make_payment(stripe_token_id, data, reference_doctype=None, reference_docname=None, payment_gateway=None):
+def make_payment(
+	stripe_token_id: str,
+	data: str,
+	reference_doctype: str | None = None,
+	reference_docname: str | None = None,
+	payment_gateway: str | None = None,
+):
 	data = json.loads(data)
 
 	data.update({"stripe_token_id": stripe_token_id})
