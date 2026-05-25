@@ -22,8 +22,12 @@ from payments.payment_gateways.doctype.mpesa_settings.mpesa_settings import (
 @patch("payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.generate_stk_push")
 class TestMpesaSettings(FrappeTestCase):
 	def setUp(self):
-		self.enterContext(change_settings("Global Defaults", {"default_company": "Wind Power LLC"}))
-		self.enterContext(change_settings("POS Settings", {"invoice_type": "POS Invoice"}))
+		def apply_settings(doctype, settings):
+			cs = change_settings(doctype, settings)
+			cs.__enter__()
+			self.addCleanup(cs.__exit__, None, None, None)
+
+		apply_settings("Global Defaults", {"default_company": "Wind Power LLC"})
 
 		# create payment gateway in setup
 		create_mpesa_settings(payment_gateway_name="_Test")
