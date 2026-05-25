@@ -48,7 +48,7 @@ bench get-app "https://github.com/${frappeuser}/erpnext" --branch "$erpnextbranc
 bench get-app payments "${GITHUB_WORKSPACE}"
 if [ "$TYPE" == "server" ]; then bench setup requirements --dev; fi
 
-wait $wkpid
+if ! wait $wkpid; then echo "wkhtmltopdf install failed" && exit 1; fi
 
 bench start &>> ~/frappe-bench/bench_start.log &
 CI=Yes bench build --app frappe &
