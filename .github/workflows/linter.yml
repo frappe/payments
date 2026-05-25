@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: payments-linter-${{ github.event_name }}-${{ github.event.number }}
+  group: payments-linter-${{ github.event_name }}-${{ github.event.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:

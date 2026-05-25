@@ -8,6 +8,9 @@ on:
       - "**.md"
       - "**.html"
       - "**.csv"
+  schedule:
+    # Run everyday at midnight UTC / 5:30 IST
+    - cron: "0 0 * * *"
   workflow_dispatch:
     inputs:
       user:
@@ -20,9 +23,14 @@ on:
         default: 'version-15-hotfix'
         required: false
         type: string
+      erpnext_branch:
+        description: 'ERPNext branch'
+        default: 'version-15-hotfix'
+        required: false
+        type: string
 
 concurrency:
-  group: payments-ci-${{ github.event_name }}-${{ github.event.number || github.event_name == 'workflow_dispatch' && github.run_id || '' }}
+  group: payments-ci-${{ github.event_name }}-${{ github.event.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -117,6 +125,7 @@ jobs:
           TYPE: server
           FRAPPE_USER: ${{ github.event.inputs.user }}
           FRAPPE_BRANCH: ${{ github.event.inputs.branch }}
+          ERPNEXT_BRANCH: ${{ github.event.inputs.erpnext_branch }}
 
       - name: Run Tests
         run: cd ~/frappe-bench/ && bench --site test_site run-parallel-tests --app payments --total-builds ${{ strategy.job-total }} --build-number ${{ matrix.container }}
