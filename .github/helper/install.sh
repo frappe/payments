@@ -31,12 +31,11 @@ mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "GRANT ALL PRIVILEGES ON 
 mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "FLUSH PRIVILEGES"
 
 install_whktml() {
-    wget -O /tmp/wkhtmltox.tar.xz https://github.com/frappe/wkhtmltopdf/raw/master/wkhtmltox-0.12.3_linux-generic-amd64.tar.xz
-    tar -xf /tmp/wkhtmltox.tar.xz -C /tmp
-    sudo mv /tmp/wkhtmltox/bin/wkhtmltopdf /usr/local/bin/wkhtmltopdf
-    sudo chmod o+x /usr/local/bin/wkhtmltopdf
+    wget -O /tmp/wkhtmltox.deb https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-2/wkhtmltox_0.12.6.1-2.jammy_amd64.deb
+    sudo apt install /tmp/wkhtmltox.deb
 }
 install_whktml &
+wkpid=$!
 
 cd ~/frappe-bench || exit
 
@@ -47,7 +46,9 @@ sed -i 's/redis_socketio:/# redis_socketio:/g' Procfile
 
 bench get-app "https://github.com/${frappeuser}/erpnext" --branch "$erpnextbranch" --resolve-deps
 bench get-app payments "${GITHUB_WORKSPACE}"
-bench setup requirements --dev
+if [ "$TYPE" == "server" ]; then bench setup requirements --dev; fi
+
+if ! wait $wkpid; then echo "wkhtmltopdf install failed" && exit 1; fi
 
 bench start &>> ~/frappe-bench/bench_start.log &
 CI=Yes bench build --app frappe &

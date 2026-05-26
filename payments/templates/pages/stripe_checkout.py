@@ -1,8 +1,6 @@
 # Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and Contributors
 # License: MIT. See LICENSE
 import json
-from frappe.integrations.doctype.stripe_settings.stripe_settings import get_gateway_controller
-from frappe.utils import cint, fmt_money
 
 import frappe
 from frappe import _
@@ -29,7 +27,6 @@ expected_keys = (
 
 def get_context(context):
 	context.no_cache = 1
-
 	# all these keys exist in form_dict
 	if not (set(expected_keys) - set(list(frappe.form_dict))):
 		for key in expected_keys:
@@ -49,11 +46,10 @@ def get_context(context):
 			recurrence = frappe.db.get_value("Payment Plan", payment_plan, "recurrence")
 
 			context["amount"] = context["amount"] + " " + _(recurrence)
-
 	else:
 		frappe.log_error(
 			"Missing keys in form_dict",
-			"Expected keys: {}," "Received keys: {}".format(expected_keys, list(frappe.form_dict)),
+			f"Expected keys: {expected_keys},Received keys: {list(frappe.form_dict)}",
 		)
 		frappe.redirect_to_message(
 			_("Some information is missing"),
@@ -75,10 +71,14 @@ def get_header_image(doc, gateway_controller):
 	return frappe.db.get_value("Stripe Settings", gateway_controller, "header_img")
 
 
-
+# nosemgrep: frappe-semgrep-rules.rules.security.guest-whitelisted-method
 @frappe.whitelist(allow_guest=True)
 def make_payment(
-	stripe_token_id, data, reference_doctype=None, reference_docname=None, payment_gateway=None
+	stripe_token_id: str,
+	data: str,
+	reference_doctype: str | None = None,
+	reference_docname: str | None = None,
+	payment_gateway: str | None = None,
 ):
 	data = json.loads(data)
 

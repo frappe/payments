@@ -3,19 +3,8 @@ from contextlib import contextmanager
 import click
 import frappe
 from frappe import _
-from frappe.custom.doctype.custom_field.custom_field import \
-    create_custom_fields
+from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.utils.data import cint
-
-
-def validate_integration_request(docname: str | None):
-	if frappe.db.get_value("Integration Request", docname, "status") == "Cancelled":
-		frappe.throw(_("Expired Token"))
-
-
-def validate_integration_request(docname: str | None):
-	if frappe.db.get_value("Integration Request", docname, "status") == "Cancelled":
-		frappe.throw(_("Expired Token"))
 
 
 def validate_integration_request(docname: str | None):
