@@ -7,12 +7,16 @@ from frappe.tests.utils import FrappeTestCase
 from payments.templates.pages.gocardless_confirmation import create_mandate
 
 
-def _make_payment_request(customer_name):
+def _make_payment_request(customer_name, naming_series=None):
 	"""A Customer -> Sales Invoice -> Payment Request chain, as the GoCardless
-	confirmation flow expects, so create_mandate() can resolve the reference."""
-	customer = frappe.get_doc({"doctype": "Customer", "customer_name": customer_name}).insert(
-		ignore_permissions=True
-	)
+	confirmation flow expects, so create_mandate() can resolve the reference.
+
+	Pass naming_series to mint a Customer whose docname differs from its display
+	name (the Customer-naming-series case behind #89)."""
+	customer_doc = {"doctype": "Customer", "customer_name": customer_name}
+	if naming_series:
+		customer_doc["naming_series"] = naming_series
+	customer = frappe.get_doc(customer_doc).insert(ignore_permissions=True)
 	si = frappe.get_doc(
 		{
 			"doctype": "Sales Invoice",
@@ -43,7 +47,43 @@ def _make_payment_request(customer_name):
 	return customer, pr
 
 
+def _use_customer_naming_series(test):
+	"""Switch Customer autonaming to a series so docname != customer_name, and
+	restore the original setting after the test."""
+	original = frappe.db.get_default("cust_master_name")
+	frappe.db.set_default("cust_master_name", "Naming Series")
+	frappe.clear_cache()
+
+	def restore():
+		frappe.db.set_default("cust_master_name", original or "")
+		frappe.clear_cache()
+
+	test.addCleanup(restore)
+
+
 class TestGoCardlessMandate(FrappeTestCase):
+	def test_create_mandate_persists_keyed_by_customer_docname(self):
+		"""Under a Customer naming series, create_mandate() must store the Customer
+		*docname* in the Link -> Customer field. Storing customer_name (display) fails
+		validation, the insert is silently swallowed, and reuse breaks (#89)."""
+		_use_customer_naming_series(self)
+		customer, pr = _make_payment_request("Reuse89 Series Co", naming_series="CUST-.YYYY.-")
+		self.assertNotEqual(customer.name, customer.customer_name)  # precondition
+
+		create_mandate(
+			{
+				"mandate": "MD-NS-1",
+				"customer": "CU-NS-1",
+				"reference_doctype": "Payment Request",
+				"reference_docname": pr.name,
+			}
+		)
+
+		# Persisted, and keyed by the Customer docname...
+		self.assertEqual(frappe.db.get_value("GoCardless Mandate", "MD-NS-1", "customer"), customer.name)
+		# ...so it is found by the exact filter check_mandate_validity() uses.
+		self.assertTrue(frappe.db.exists("GoCardless Mandate", {"customer": customer.name, "disabled": 0}))
+
 	def test_failed_mandate_creation_logs_transaction_context(self):
 		"""When create_mandate() can't persist a mandate, the Error Log entry must
 		spell out the transaction (reference doc, customer, mandate id) in a readable

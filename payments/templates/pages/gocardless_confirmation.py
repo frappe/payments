@@ -88,15 +88,21 @@ def create_mandate(data):
 			as_dict=1,
 		)
 		erpnext_customer = frappe.db.get_value(
-			reference_doc.reference_doctype, reference_doc.reference_name, ["customer_name"], as_dict=1
+			reference_doc.reference_doctype,
+			reference_doc.reference_name,
+			["customer", "customer_name"],
+			as_dict=1,
 		)
 
 		try:
 			frappe.get_doc(
 				{
 					"doctype": "GoCardless Mandate",
+					# `customer` is a Link -> Customer field, so it must hold the Customer
+					# docname, not the display name: under a Customer naming series the two
+					# differ and storing customer_name fails validation (#89).
 					"mandate": mandate,
-					"customer": erpnext_customer.customer_name,
+					"customer": erpnext_customer.customer,
 					"gocardless_customer": data.get("customer"),
 				}
 			).insert(ignore_permissions=True)
