@@ -38,3 +38,19 @@ class TestGoCardlessSettings(FrappeTestCase):
 		# ...not by the display name, and tolerant of a missing/empty customer.
 		self.assertIsNone(settings.get_registered_mandate(customer.customer_name))
 		self.assertIsNone(settings.get_registered_mandate(None))
+
+	def test_checkout_resolves_payer_from_display_name(self):
+		"""The checkout URL carries the Customer display name (Payment Request sends
+		customer_name as payer_name), so resolving the payer must tolerate
+		docname != customer_name under a Customer naming series, otherwise the very
+		first subscription dies before a mandate can be created (#89)."""
+		from payments.templates.pages.gocardless_checkout import get_payer_customer
+
+		self._use_customer_naming_series()
+		customer = frappe.get_doc(
+			{"doctype": "Customer", "customer_name": "Checkout Payer Co", "naming_series": "CUST-.YYYY.-"}
+		).insert(ignore_permissions=True)
+		self.assertNotEqual(customer.name, customer.customer_name)  # precondition
+
+		resolved = get_payer_customer(customer.customer_name)
+		self.assertEqual(resolved.name, customer.name)
