@@ -102,4 +102,16 @@ def create_mandate(data):
 			).insert(ignore_permissions=True)
 
 		except Exception:
-			frappe.log_error("Gocardless: Unable to create mandate")
+			# Persisting the mandate is what lets future payments reuse it instead of
+			# re-prompting the payer (#89). Summarise which transaction/customer failed
+			# so the Error Log entry is actionable on its own, above the traceback.
+			frappe.log_error(
+				title="GoCardless: Unable to create mandate",
+				message=(
+					f"Could not save GoCardless Mandate {mandate} for "
+					f"{data.get('reference_doctype')} {data.get('reference_docname')} "
+					f"(customer: {erpnext_customer.customer_name if erpnext_customer else None}, "
+					f"gocardless_customer: {data.get('customer')}).\n\n"
+					f"{frappe.get_traceback(with_context=True)}"
+				),
+			)
