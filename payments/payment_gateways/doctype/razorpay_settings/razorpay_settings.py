@@ -325,7 +325,9 @@ class RazorpaySettings(Document):
 		return kwargs
 
 	def get_payment_url(self, **kwargs):
-		if not kwargs.get("order_id"):
+		# create a razorpay order unless a valid razorpay order id is already provided
+		if not str(kwargs.get("order_id") or "").startswith("order_"):
+			kwargs.setdefault("receipt", kwargs.get("order_id"))
 			order = self.create_order(**kwargs)
 			kwargs.update({"order_id": order.get("id")})
 
