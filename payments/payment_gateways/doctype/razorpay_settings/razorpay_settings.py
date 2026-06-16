@@ -74,7 +74,7 @@ from frappe.integrations.utils import (
 )
 from frappe.model.document import Document
 from frappe.utils import call_hook_method, cint, get_timestamp, get_url
-
+from frappe.integrations.utils import get_json
 from payments.utils import create_payment_gateway
 
 
@@ -360,6 +360,9 @@ class RazorpaySettings(Document):
 					),
 					data=payment_options,
 				)
+				kwargs.update({"order_id": order.get("id")})
+				integration_request.update_status(kwargs, "Queued")
+				integration_request.db_set("output", get_json({"order": order}))
 				order["integration_request"] = integration_request.name
 				return order  # Order returned to be consumed by razorpay.js
 			except Exception:
@@ -400,6 +403,9 @@ class RazorpaySettings(Document):
 				f"https://api.razorpay.com/v1/payments/{self.data.razorpay_payment_id}",
 				auth=(settings.api_key, settings.api_secret),
 			)
+
+			if resp.get('order_id') != data.get("order_id"):
+				frappe.throw(_("Order ID mismatch"))
 
 			if resp.get("status") == "authorized":
 				self.integration_request.update_status(data, "Authorized")
