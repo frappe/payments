@@ -73,9 +73,11 @@ from frappe.integrations.utils import (
 	make_post_request,
 )
 from frappe.model.document import Document
-from frappe.utils import call_hook_method, cint, get_timestamp, get_url
+from frappe.utils import call_hook_method, cint, flt, get_timestamp, get_url
 
 from payments.utils import create_payment_gateway
+
+RAZORPAY_BASE_URL = "https://api.razorpay.com/v1"
 
 
 class RazorpaySettings(Document):
@@ -227,7 +229,7 @@ class RazorpaySettings(Document):
 		if self.api_key and self.api_secret:
 			try:
 				make_get_request(
-					url="https://api.razorpay.com/v1/payments",
+					url=f"{RAZORPAY_BASE_URL}/payments",
 					auth=(
 						self.api_key,
 						self.get_password(fieldname="api_secret", raise_exception=False),
@@ -257,7 +259,7 @@ class RazorpaySettings(Document):
 		        "quantity": 1 (The total amount is calculated as item.amount * quantity)
 		}
 		"""
-		url = "https://api.razorpay.com/v1/subscriptions/{}/addons".format(kwargs.get("subscription_id"))
+		url = f"{RAZORPAY_BASE_URL}/subscriptions/{kwargs.get('subscription_id')}/addons"
 
 		try:
 			if not frappe.conf.converted_rupee_to_paisa:
@@ -299,7 +301,7 @@ class RazorpaySettings(Document):
 
 		try:
 			resp = make_post_request(
-				"https://api.razorpay.com/v1/subscriptions",
+				f"{RAZORPAY_BASE_URL}/subscriptions",
 				auth=(settings.api_key, settings.api_secret),
 				data=json.dumps(subscription_details),
 				headers={"content-type": "application/json"},
@@ -353,7 +355,7 @@ class RazorpaySettings(Document):
 		if self.api_key and self.api_secret:
 			try:
 				order = make_post_request(
-					"https://api.razorpay.com/v1/orders",
+					f"{RAZORPAY_BASE_URL}/orders",
 					auth=(
 						self.api_key,
 						self.get_password(fieldname="api_secret", raise_exception=False),
@@ -397,7 +399,7 @@ class RazorpaySettings(Document):
 
 		try:
 			resp = make_get_request(
-				f"https://api.razorpay.com/v1/payments/{self.data.razorpay_payment_id}",
+				f"{RAZORPAY_BASE_URL}/payments/{self.data.razorpay_payment_id}",
 				auth=(settings.api_key, settings.api_secret),
 			)
 
@@ -474,12 +476,56 @@ class RazorpaySettings(Document):
 
 		return settings
 
+	def fetch_payment(self, payment_id):
+		settings = self.get_settings({})
+		return make_get_request(
+			f"{RAZORPAY_BASE_URL}/payments/{payment_id}",
+			auth=(settings.api_key, settings.api_secret),
+		)
+
+	def fetch_refund(self, refund_id):
+		settings = self.get_settings({})
+		return make_get_request(
+			f"{RAZORPAY_BASE_URL}/refunds/{refund_id}",
+			auth=(settings.api_key, settings.api_secret),
+		)
+
+	def refund_payment(self, payment_id, amount=None):
+		payment = self.fetch_payment(payment_id)
+
+		if payment.get("status") != "captured":
+			frappe.throw(_("Only captured payments can be refunded"))
+
+		refundable_amount = (cint(payment.get("amount")) - cint(payment.get("amount_refunded"))) / 100
+
+		if amount is None:
+			amount = refundable_amount
+
+		amount = flt(amount)
+		if amount <= 0 or amount > refundable_amount:
+			frappe.throw(
+				_("Refund amount must be between 0 and {0} {1}").format(
+					refundable_amount, payment.get("currency") or ""
+				)
+			)
+
+		settings = self.get_settings({})
+		try:
+			return make_post_request(
+				f"{RAZORPAY_BASE_URL}/payments/{payment_id}/refund",
+				auth=(settings.api_key, settings.api_secret),
+				json={"amount": cint(round(amount * 100))},
+			)
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "Razorpay Refund Failed")
+			frappe.throw(_("Razorpay refund failed. Check Error Log for details."))
+
 	def cancel_subscription(self, subscription_id):
 		settings = self.get_settings({})
 
 		try:
 			make_post_request(
-				f"https://api.razorpay.com/v1/subscriptions/{subscription_id}/cancel",
+				f"{RAZORPAY_BASE_URL}/subscriptions/{subscription_id}/cancel",
 				auth=(settings.api_key, settings.api_secret),
 			)
 		except Exception:
@@ -530,16 +576,14 @@ def capture_payment(is_sandbox=False, sanbox_response=None):
 				settings = controller.get_settings(data)
 
 				resp = make_get_request(
-					"https://api.razorpay.com/v1/payments/{}".format(data.get("razorpay_payment_id")),
+					f"{RAZORPAY_BASE_URL}/payments/{data.get('razorpay_payment_id')}",
 					auth=(settings.api_key, settings.api_secret),
 					data={"amount": data.get("amount")},
 				)
 
 				if resp.get("status") == "authorized":
 					resp = make_post_request(
-						"https://api.razorpay.com/v1/payments/{}/capture".format(
-							data.get("razorpay_payment_id")
-						),
+						f"{RAZORPAY_BASE_URL}/payments/{data.get('razorpay_payment_id')}/capture",
 						auth=(settings.api_key, settings.api_secret),
 						data={"amount": data.get("amount")},
 					)
@@ -670,7 +714,7 @@ def validate_payment_callback(data):
 	settings = controller.get_settings(data)
 
 	resp = make_get_request(
-		f"https://api.razorpay.com/v1/subscriptions/{subscription_id}",
+		f"{RAZORPAY_BASE_URL}/subscriptions/{subscription_id}",
 		auth=(settings.api_key, settings.api_secret),
 	)
 
