@@ -66,6 +66,8 @@ app_license = "MIT"
 before_install = "payments.utils.before_install"
 after_install = "payments.utils.after_install"
 
+before_migrate = "payments.utils.validate_erpnext_compatibility"
+
 # Uninstallation
 # ------------
 

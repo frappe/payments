@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from importlib import import_module
 
 import click
 import frappe
@@ -375,3 +376,20 @@ def erpnext_app_import_guard():
 		yield
 	except ImportError:
 		frappe.throw(msg, title=_("Missing ERPNext App"))
+
+
+def validate_erpnext_compatibility():
+	"""Ensure ERPNext app is compatible before site migration."""
+
+	if "erpnext" not in frappe.get_installed_apps():
+		return
+
+	try:
+		erpnext_utils = import_module("erpnext.setup.utils")
+	except Exception:
+		frappe.throw(_("Unable to load Erpnext utilities.\n\n") + frappe.get_traceback())
+
+	if not hasattr(erpnext_utils, "validate_payments_compatibility"):
+		frappe.throw(
+			_("Incompatible ERPNext app version detected. Please update the ERPNext app before migration.")
+		)
