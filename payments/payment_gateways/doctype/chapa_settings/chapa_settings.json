@@ -237,7 +237,7 @@
  "modified": "2022-07-24 14:33:06.050377",
  "modified_by": "Administrator",
  "module": "Payment Gateways",
- "name": "Braintree Settings",
+ "name": "Chapa Settings",
  "name_case": "",
  "owner": "Administrator",
  "permissions": [
