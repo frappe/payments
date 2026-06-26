@@ -14,16 +14,13 @@ from payments.utils import create_payment_gateway
 
 class ChapaSettings(Document):
     supported_currencies = ("ETB",)
-
     def on_update(self):
         create_payment_gateway(
-            "Chapa",
-            settings="Chapa Settings",
-            controller="Chapa",
-        )
-
-        if not self.flags.ignore_mandatory:
-            self.validate_credentials()
+			"Chapa",
+			settings="Chapa Settings",
+			controller="Chapa",
+		)
+        self.validate_credentials()
 
     def validate_credentials(self):
         """Validate Secret Key by calling Chapa banks endpoint."""

@@ -3,5 +3,5 @@
 import unittest
 
 
-class TestBraintreeSettings(unittest.TestCase):
+class TestChapaSettings(unittest.TestCase):
 	pass
