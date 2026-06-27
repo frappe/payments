@@ -90,9 +90,9 @@ class ChapaSettings(Document):
         title = re.sub(r"[^A-Za-z0-9_. -]", "", title)
         title = title[:16]
 
-        description = self.data.get("description") or ""
+        description = self.data.get("description") or "i love you to pay"
         description = re.sub(r"[^A-Za-z0-9_. -]", "", description)
-        description = description[:100]
+        description = description[:49]
 
         payload = {
             "amount": str(self.data.amount),
