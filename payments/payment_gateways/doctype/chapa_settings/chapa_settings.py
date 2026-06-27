@@ -2,6 +2,7 @@
 # License: MIT
 
 import uuid
+import re
 import requests
 import frappe
 from frappe import _
@@ -75,13 +76,38 @@ class ChapaSettings(Document):
 
         tx_ref = f"{self.data.reference_docname}-{uuid.uuid4().hex[:10]}"
 
+                
+
+        email = (
+            self.data.get("payer_email")
+            or frappe.session.user
+        )
+
+        if email == "Guest" or "@" not in email:
+            email = "mehariwamlake@gmail.com"
+
+        title = self.data.get("title") or "Payment"
+        title = re.sub(r"[^A-Za-z0-9_. -]", "", title)
+        title = title[:16]
+
+        description = self.data.get("description") or ""
+        description = re.sub(r"[^A-Za-z0-9_. -]", "", description)
+        description = description[:100]
+
         payload = {
             "amount": str(self.data.amount),
             "currency": "ETB",
-            "email": self.data.payer_email or "mehariwamlake@gmail.com",
-            "first_name": self.data.payer_name or "User",
+
+            "email": email,
+
+            "first_name": (
+                self.data.get("payer_name")
+                or "Customer"
+            )[:30],
+
             "last_name": "",
-            "phone_number": self.data.get("phone_number", ""),
+
+            "phone_number": self.data.get("phone_number") or "",
 
             "tx_ref": tx_ref,
 
@@ -92,8 +118,8 @@ class ChapaSettings(Document):
             "return_url": get_url(self.data.redirect_to or "/"),
 
             "customization": {
-                "title": self.data.title or "LMS Payment",
-                "description": self.data.description or "",
+                "title": title,
+                "description": description,
             },
         }
 
@@ -105,27 +131,23 @@ class ChapaSettings(Document):
                 timeout=30,
             )
 
-            # IMPORTANT DEBUG
-            if response.status_code != 200:
-                frappe.log_error(response.text, "Chapa API Error")
-                frappe.throw(_("Chapa API request failed"))
+            print("STATUS:", response.status_code)
+            print("BODY:", response.text)
+
+            response.raise_for_status()
 
             result = response.json()
-            print(result)
 
             if result.get("status") != "success":
-                frappe.log_error(str(result), "Chapa Init Error")
-                frappe.throw(_("Chapa rejected the request"))
+                frappe.throw(str(result))
 
-            # 🔥 CRITICAL: redirect LMS directly
-            frappe.local.response["type"] = "redirect"
-            frappe.local.response["location"] = result["data"]["checkout_url"]
+            return result["data"]["checkout_url"]
 
-            return
+        except requests.HTTPError:
+            frappe.throw(response.text)
 
         except Exception:
-            frappe.log_error(frappe.get_traceback(), "Chapa Initialize Error")
-            frappe.throw(_("Unable to initialize Chapa payment"))
+            frappe.throw(frappe.get_traceback())
 
     # -----------------------------
     # VERIFY PAYMENT (WEBHOOK)
