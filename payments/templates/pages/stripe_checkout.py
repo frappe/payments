@@ -48,16 +48,22 @@ def get_context(context):
 				limit=1,
 			)
 			if payment_plans:
-				billing_interval, billing_interval_count = frappe.db.get_value(
-					"Subscription Plan", payment_plans[0].plan, ["billing_interval", "billing_interval_count"]
+				plan = frappe.db.get_value(
+					"Subscription Plan",
+					payment_plans[0].plan,
+					["billing_interval", "billing_interval_count"],
+					as_dict=True,
 				)
-				billing_interval_count = cint(billing_interval_count) or 1
-				if billing_interval_count == 1:
-					recurrence = _("per {0}").format(_(billing_interval))
-				else:
-					recurrence = _("every {0} {1}s").format(billing_interval_count, _(billing_interval))
+				if plan:
+					billing_interval_count = cint(plan.billing_interval_count) or 1
+					if billing_interval_count == 1:
+						recurrence = _("per {0}").format(_(plan.billing_interval))
+					else:
+						recurrence = _("every {0} {1}s").format(
+							billing_interval_count, _(plan.billing_interval)
+						)
 
-				context["amount"] = context["amount"] + " " + recurrence
+					context["amount"] = context["amount"] + " " + recurrence
 	else:
 		frappe.redirect_to_message(
 			_("Some information is missing"),
@@ -108,6 +114,9 @@ def get_reference_amount(reference_doctype, reference_docname):
 		frappe.throw(_("Cannot determine the payable amount for {0}.").format(reference_doctype))
 	fields = [amount_field] + (["currency"] if meta.has_field("currency") else [])
 	row = frappe.db.get_value(reference_doctype, reference_docname, fields, as_dict=True)
+	if not row:
+		# Reference vanished between the guard's exists check and here (TOCTOU).
+		frappe.throw(_("Payment reference {0} no longer exists.").format(reference_docname))
 	return row.get(amount_field), row.get("currency")
 
 
@@ -120,9 +129,7 @@ def create_payment_intent(data, reference_doctype=None, reference_docname=None, 
 	"""
 	guard_payment_reference(reference_doctype, reference_docname)
 	data = json.loads(data)
-	# Reference + amount/currency are authoritative server-side, never the client.
-	# Stamping the reference binds the PaymentIntent's metadata to this order so it
-	# can't later be replayed to settle a different one.
+	# Amount/reference are authoritative server-side and bind the intent to this order.
 	data["reference_doctype"] = reference_doctype
 	data["reference_docname"] = reference_docname
 	data["amount"], currency = get_reference_amount(reference_doctype, reference_docname)
@@ -131,6 +138,39 @@ def create_payment_intent(data, reference_doctype=None, reference_docname=None, 
 	gateway_controller = get_gateway_controller(reference_doctype, reference_docname, payment_gateway)
 	settings = frappe.get_doc("Stripe Settings", gateway_controller)
 	result = settings.create_payment_intent_for_checkout(frappe._dict(data))
+	frappe.db.commit()
+	return result
+
+
+@frappe.whitelist()
+def save_card(data, reference_doctype=None, reference_docname=None, payment_gateway=None):
+	"""Create a SetupIntent so a card can be saved off-session for later reuse.
+
+	Unlike the one-off checkout (which guests legitimately complete), storing a
+	card is a standing capability to charge later, so this requires an authenticated
+	user. Omitting allow_guest makes the framework reject Guest callers; the guard
+	below then enforces read access on the reference for that logged-in user.
+	"""
+	guard_payment_reference(reference_doctype, reference_docname)
+	data = json.loads(data)
+	gateway_controller = get_gateway_controller(reference_doctype, reference_docname, payment_gateway)
+	settings = frappe.get_doc("Stripe Settings", gateway_controller)
+	result = settings.create_setup_intent_for_card(frappe._dict(data))
+	frappe.db.commit()
+	return result
+
+
+@frappe.whitelist(allow_guest=True)
+def set_card_consent(
+	payment_intent, client_secret=None, reference_doctype=None, reference_docname=None, payment_gateway=None
+):
+	"""Record "save my card" consent on the checkout PaymentIntent (embedded flow)."""
+	guard_payment_reference(reference_doctype, reference_docname)
+	gateway_controller = get_gateway_controller(reference_doctype, reference_docname, payment_gateway)
+	settings = frappe.get_doc("Stripe Settings", gateway_controller)
+	result = settings.enable_setup_future_usage(
+		payment_intent, client_secret, reference_doctype, reference_docname
+	)
 	frappe.db.commit()
 	return result
 
@@ -147,8 +187,6 @@ def make_payment(
 	guard_payment_reference(reference_doctype, reference_docname)
 	data = json.loads(data)
 	# Reference + amount/currency are authoritative server-side, never the client.
-	# The reference is what gets settled and is cross-checked against the intent's
-	# metadata so a payment for one order can't settle another.
 	data["reference_doctype"] = reference_doctype
 	data["reference_docname"] = reference_docname
 	data["amount"], currency = get_reference_amount(reference_doctype, reference_docname)

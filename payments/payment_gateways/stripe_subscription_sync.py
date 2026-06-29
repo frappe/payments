@@ -3,6 +3,7 @@
 
 import frappe
 from frappe import _
+from frappe.utils import cint
 
 from payments.payment_gateways.stripe_utils import (
 	get_stripe_settings_for_gateway,
@@ -50,7 +51,7 @@ def sync_stripe_price(doc, method=None):
 	unit_amount = to_minor_units(unit_cost, doc.currency)
 	recurring = {
 		"interval": INTERVAL_MAP[doc.billing_interval],
-		"interval_count": doc.billing_interval_count,
+		"interval_count": cint(doc.billing_interval_count) or 1,
 	}
 
 	try:

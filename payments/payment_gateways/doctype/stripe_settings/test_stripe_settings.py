@@ -8,12 +8,19 @@
 #   - PaymentIntent replay (settle order B with order A's payment)
 #   - duplicate settlement (webhook vs browser-return race)
 # They use Frappe core doctypes only, so they run without ERPNext installed.
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import frappe
+import stripe
 from frappe.tests.utils import FrappeTestCase
 
+from payments.payment_gateways.stripe_utils import (
+	get_or_create_customer,
+	get_stripe_settings_for_gateway,
+)
 from payments.templates.pages.stripe_checkout import get_reference_amount, guard_payment_reference
+
+STRIPE_SETTINGS = "payments.payment_gateways.doctype.stripe_settings.stripe_settings"
 
 
 class TestStripeSettings(FrappeTestCase):
@@ -72,3 +79,90 @@ class TestStripeSettings(FrappeTestCase):
 
 		# A concurrent second caller (already Completed) must lose the claim.
 		self.assertFalse(settings.claim_integration_request())
+
+	def test_enable_setup_future_usage_requires_matching_client_secret(self):
+		"""Consent can only be set with the intent's own client_secret (ownership proof)."""
+		settings = frappe.new_doc("Stripe Settings")
+		intent = frappe._dict(
+			{
+				"client_secret": "pi_1_secret_ok",
+				"status": "requires_confirmation",
+				"customer": "cus_1",
+				"metadata": {"reference_doctype": "Payment Request", "reference_docname": "ORDER-A"},
+			}
+		)
+		client = MagicMock()
+		client.payment_intents.retrieve.return_value = intent
+		with patch(STRIPE_SETTINGS + ".get_stripe_client", return_value=client):
+			with self.assertRaises(frappe.PermissionError):
+				settings.enable_setup_future_usage("pi_1", "wrong", "Payment Request", "ORDER-A")
+			client.payment_intents.modify.assert_not_called()
+			result = settings.enable_setup_future_usage(
+				"pi_1", "pi_1_secret_ok", "Payment Request", "ORDER-A"
+			)
+		self.assertTrue(result["updated"])
+		client.payment_intents.modify.assert_called_once()
+
+	def test_gateway_resolution_walks_account_chain(self):
+		"""Payment Gateway Account -> Payment Gateway -> Stripe Settings resolves the controller."""
+		with (
+			patch.object(frappe.db, "get_value") as gv,
+			patch.object(frappe, "get_doc", return_value=frappe._dict({"name": "Stripe"})) as gd,
+		):
+			gv.side_effect = [
+				"Stripe-Stripe",
+				frappe._dict({"gateway_settings": "Stripe Settings", "gateway_controller": "Stripe"}),
+			]
+			doc = get_stripe_settings_for_gateway("Stripe-Stripe - INR - CW")
+		self.assertEqual(doc.name, "Stripe")
+		gd.assert_called_once_with("Stripe Settings", "Stripe")
+
+	def test_gateway_resolution_falls_back_to_sole_record(self):
+		"""A blank gateway_controller resolves to the only Stripe Settings record."""
+		with (
+			patch.object(frappe.db, "get_value") as gv,
+			patch.object(frappe, "get_all", return_value=["Stripe"]),
+			patch.object(frappe, "get_doc", return_value=frappe._dict({"name": "Stripe"})),
+		):
+			gv.side_effect = [
+				"Stripe-Stripe",
+				frappe._dict({"gateway_settings": "Stripe Settings", "gateway_controller": None}),
+			]
+			doc = get_stripe_settings_for_gateway("acct")
+		self.assertEqual(doc.name, "Stripe")
+
+	def test_gateway_resolution_ignores_non_stripe(self):
+		"""A non-Stripe gateway returns None so the sync is skipped, not misrouted."""
+		with patch.object(frappe.db, "get_value") as gv:
+			gv.side_effect = [
+				"Razorpay-X",
+				frappe._dict({"gateway_settings": "Razorpay Settings", "gateway_controller": "X"}),
+			]
+			self.assertIsNone(get_stripe_settings_for_gateway("acct"))
+
+	def test_get_or_create_customer_does_not_duplicate_on_transient_error(self):
+		"""A transient Stripe error on lookup propagates instead of creating a duplicate."""
+		client = MagicMock()
+		client.customers.retrieve.side_effect = stripe.error.AuthenticationError("bad key")
+		with (
+			patch.object(frappe.db, "has_column", return_value=True),
+			patch.object(frappe.db, "get_value", return_value="cus_old"),
+		):
+			with self.assertRaises(stripe.error.AuthenticationError):
+				get_or_create_customer(client, customer="ACME")
+		client.customers.create.assert_not_called()
+
+	def test_get_or_create_customer_recovers_from_stale_id(self):
+		"""A stale/deleted id (InvalidRequestError) falls through to recreate."""
+		client = MagicMock()
+		client.customers.retrieve.side_effect = stripe.error.InvalidRequestError("no such customer", "id")
+		client.customers.search.return_value = frappe._dict({"data": []})
+		client.customers.create.return_value = frappe._dict({"id": "cus_new"})
+		with (
+			patch.object(frappe.db, "has_column", return_value=True),
+			patch.object(frappe.db, "get_value", return_value="cus_stale"),
+			patch.object(frappe.db, "set_value"),
+		):
+			cid = get_or_create_customer(client, customer="ACME")
+		self.assertEqual(cid, "cus_new")
+		client.customers.create.assert_called_once()
