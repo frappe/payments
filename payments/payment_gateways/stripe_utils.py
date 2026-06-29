@@ -105,7 +105,10 @@ def get_or_create_customer(client, customer=None, email=None, name=None):
 				if not obj.get("deleted"):
 					return existing
 			except stripe.error.InvalidRequestError:
-				pass  # stale / deleted id — fall through; other errors surface, not swallowed
+				# Cached id is stale / deleted at Stripe; log a trace and fall through to recreate.
+				frappe.log_error(
+					f"Stale Stripe customer id {existing} for {customer}", "Stripe customer resolution"
+				)
 
 	# Recover a Stripe customer by metadata to dedupe a prior rolled-back attempt.
 	if customer:
@@ -136,8 +139,8 @@ def _find_stripe_customer_by_party(client, customer):
 		result = client.customers.search(
 			{"query": f"metadata['erpnext_customer']:'{safe_customer}'", "limit": 1}
 		)
-	except Exception:
-		return None  # search index unavailable / eventual-consistency miss
+	except stripe.error.StripeError:
+		return None  # search unavailable / eventual-consistency miss; other errors surface
 	for obj in result.get("data") or []:
 		if not obj.get("deleted"):
 			return obj.id
@@ -151,14 +154,20 @@ def get_stripe_settings_for_gateway(payment_gateway_account):
 	    Payment Gateway Account -> Payment Gateway -> Stripe Settings
 	Returns None when the account is not backed by Stripe Settings.
 	"""
-	pg = frappe.db.get_value("Payment Gateway Account", payment_gateway_account, "payment_gateway")
-	if not pg:
+	payment_gateway = frappe.db.get_value(
+		"Payment Gateway Account", payment_gateway_account, "payment_gateway"
+	)
+	if not payment_gateway:
 		return None
-	gw = frappe.db.get_value("Payment Gateway", pg, ["gateway_settings", "gateway_controller"], as_dict=True)
-	if not gw or gw.gateway_settings != "Stripe Settings":
+	gateway = frappe.db.get_value(
+		"Payment Gateway", payment_gateway, ["gateway_settings", "gateway_controller"], as_dict=True
+	)
+	if not gateway or gateway.gateway_settings != "Stripe Settings":
 		return None
-	if not gw.gateway_controller:
-		# No explicit controller: use the sole Stripe Settings record if unambiguous.
-		names = frappe.get_all("Stripe Settings", pluck="name", limit=2)
-		return frappe.get_doc("Stripe Settings", names[0]) if len(names) == 1 else None
-	return frappe.get_doc("Stripe Settings", gw.gateway_controller)
+	if not gateway.gateway_controller:
+		# No explicit controller: use the sole Stripe Settings record, only if unambiguous.
+		if frappe.db.count("Stripe Settings") != 1:
+			return None
+		name = frappe.get_all("Stripe Settings", pluck="name", limit=1)[0]
+		return frappe.get_doc("Stripe Settings", name)
+	return frappe.get_doc("Stripe Settings", gateway.gateway_controller)

@@ -55,15 +55,23 @@ def get_context(context):
 					as_dict=True,
 				)
 				if plan:
+					singular = {
+						"Day": _("daily"),
+						"Week": _("weekly"),
+						"Month": _("monthly"),
+						"Year": _("yearly"),
+					}
+					plural = {"Day": _("days"), "Week": _("weeks"), "Month": _("months"), "Year": _("years")}
 					billing_interval_count = cint(plan.billing_interval_count) or 1
 					if billing_interval_count == 1:
-						recurrence = _("per {0}").format(_(plan.billing_interval))
+						recurrence = singular.get(plan.billing_interval, "")
 					else:
-						recurrence = _("every {0} {1}s").format(
-							billing_interval_count, _(plan.billing_interval)
+						recurrence = _("every {0} {1}").format(
+							billing_interval_count, plural.get(plan.billing_interval, "")
 						)
 
-					context["amount"] = context["amount"] + " " + recurrence
+					if recurrence:
+						context["amount"] = context["amount"] + " " + recurrence
 	else:
 		frappe.redirect_to_message(
 			_("Some information is missing"),
