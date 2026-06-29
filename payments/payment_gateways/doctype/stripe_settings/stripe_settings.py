@@ -651,7 +651,17 @@ class StripeSettings(Document):
 				"reference_docname": metadata.get("reference_docname"),
 			}
 		)
-		self.integration_request.db_set("output", session.get("payment_intent"), update_modified=False)
+		intent_id = session.get("payment_intent")
+		if not intent_id and session.get("subscription"):
+			# Subscription-mode sessions carry no top-level PaymentIntent; pull the one
+			# from the first invoice so the Payment Entry is refundable via the UI.
+			sub = client.subscriptions.retrieve(
+				session["subscription"], {"expand": ["latest_invoice.payment_intent"]}
+			)
+			li = sub.get("latest_invoice") or {}
+			pi = li.get("payment_intent") if li else None
+			intent_id = pi.get("id") if pi else None
+		self.integration_request.db_set("output", intent_id, update_modified=False)
 		self.flags.status_changed_to = "Completed"
 		return self.finalize_request()
 
@@ -697,7 +707,20 @@ class StripeSettings(Document):
 		if pr.reference_name and get_existing_payment_entry(pr.reference_name):
 			return  # the invoice is already settled by a Payment Entry
 
-		pr.set_as_paid()
+		# Settle as Administrator: the Guest checkout return / webhook can't read the Sales Invoice.
+		original_user = frappe.session.user
+		try:
+			frappe.set_user("Administrator")
+			payment_entry = pr.set_as_paid()
+		finally:
+			frappe.set_user(original_user)
+
+		# Stamp the PaymentIntent onto the new PE (needed for refunds).
+		intent_id = getattr(getattr(self, "integration_request", None), "output", None)
+		if intent_id and payment_entry and payment_entry.meta.has_field("stripe_payment_intent"):
+			frappe.db.set_value(
+				"Payment Entry", payment_entry.name, "stripe_payment_intent", intent_id, update_modified=False
+			)
 
 	def finalize_request(self):
 		redirect_to = self.data.get("redirect_to") or None
@@ -759,6 +782,8 @@ def clear_webhook_secret_cache():
 @frappe.whitelist()
 def refund_payment_entry(payment_entry, amount=None):
 	"""Refund a Stripe-originated Payment Entry. Books are updated by the webhook."""
+	# Real-money action: require write access to this specific Payment Entry.
+	frappe.has_permission("Payment Entry", "write", payment_entry, throw=True)
 	pi = frappe.db.get_value("Payment Entry", payment_entry, "stripe_payment_intent")
 	if not pi:
 		frappe.throw(_("This Payment Entry has no linked Stripe payment to refund."))

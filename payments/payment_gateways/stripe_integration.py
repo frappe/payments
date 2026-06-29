@@ -86,7 +86,11 @@ def create_subscription_on_stripe(stripe_settings):
 		subscription = client.subscriptions.create(
 			create_args, {"idempotency_key": idempotency_key("sub", pr.name)}
 		)
-		stripe_settings.integration_request.db_set("output", subscription.id, update_modified=False)
+		# Stamp the first invoice's PaymentIntent (not the sub id) so the PE is refundable.
+		_intent = getattr(getattr(subscription, "latest_invoice", None), "payment_intent", None)
+		stripe_settings.integration_request.db_set(
+			"output", _intent.id if _intent else subscription.id, update_modified=False
+		)
 		link_stripe_subscription(erpnext_sub, subscription.id, customer_id)
 
 		if subscription.status in ("active", "trialing"):

@@ -17,7 +17,8 @@
   "reference_name",
   "section_break_payload",
   "payload",
-  "error"
+  "error",
+  "retry_count"
  ],
  "fields": [
   {
@@ -84,6 +85,13 @@
    "fieldname": "error",
    "fieldtype": "Long Text",
    "label": "Error"
+  },
+  {
+   "default": "0",
+   "fieldname": "retry_count",
+   "fieldtype": "Int",
+   "label": "Retry Count",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,

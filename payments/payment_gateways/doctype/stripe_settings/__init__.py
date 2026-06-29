@@ -59,6 +59,9 @@ def handle_event(event, settings):
 	A prior *Failed* attempt is allowed to reprocess (its log row is reused); any
 	other prior status is a genuine duplicate and is skipped.
 	"""
+	# The event is signature-verified; run reconciliation as Administrator so the
+	# handlers can read/write ERPNext docs (the endpoint itself is allow_guest).
+	frappe.set_user("Administrator")
 	event_id = event["id"]
 	prior = frappe.db.get_value(
 		"Stripe Webhook Log", {"stripe_event_id": event_id}, ["name", "status"], as_dict=True

@@ -275,36 +275,39 @@ def process_refund(event, settings):
 	amount = from_minor_units(charge.get("amount_refunded", 0), charge.get("currency"))
 	frappe.get_doc("Payment Entry", pe).add_comment(
 		"Comment",
-		frappe._("Stripe refund processed: {0} {1} (charge {2}). Post a credit note / reversal if required.").format(
-			amount, (charge.get("currency") or "").upper(), charge.get("id")
-		),
+		frappe._(
+			"Stripe refund processed: {0} {1} (charge {2}). Post a credit note / reversal if required."
+		).format(amount, (charge.get("currency") or "").upper(), charge.get("id")),
 	)
 	return {"status_label": "Processed", "reference_doctype": "Payment Entry", "reference_name": pe}
 
 
 def sweep_pending():
 	"""Scheduler: retry webhook events that failed processing (dropped/erroring deliveries)."""
+	MAX_RETRIES = 5
 	rows = frappe.get_all(
-		"Stripe Webhook Log", filters={"status": "Failed"}, fields=["name", "stripe_settings", "payload"], limit=50
+		"Stripe Webhook Log",
+		filters={"status": "Failed", "retry_count": ("<", MAX_RETRIES)},
+		fields=["name", "stripe_settings", "payload", "retry_count"],
+		limit=50,
 	)
 	for row in rows:
 		try:
 			event = frappe.parse_json(row.payload)
-			settings = (
-				frappe.get_doc("Stripe Settings", row.stripe_settings) if row.stripe_settings else None
-			)
-			result = route_event(event, settings) or {}
-			frappe.db.set_value(
-				"Stripe Webhook Log",
-				row.name,
-				"status",
-				result.get("status_label", "Processed"),
-				update_modified=False,
-			)
-			frappe.db.commit()
+			settings = frappe.get_doc("Stripe Settings", row.stripe_settings) if row.stripe_settings else None
+			status_label = (route_event(event, settings) or {}).get("status_label", "Processed")
 		except Exception:
 			frappe.db.rollback()
 			frappe.log_error(frappe.get_traceback(), "Stripe webhook sweep failed")
+			status_label = "Failed"
+
+		# Count the attempt whether the handler threw OR returned Failed, so a
+		# permanently-failing event ages out of the sweep instead of looping forever.
+		updates = {"status": status_label}
+		if status_label == "Failed":
+			updates["retry_count"] = (row.retry_count or 0) + 1
+		frappe.db.set_value("Stripe Webhook Log", row.name, updates, update_modified=False)
+		frappe.db.commit()
 
 
 _HANDLERS = {
