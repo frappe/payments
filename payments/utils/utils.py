@@ -155,13 +155,68 @@ def make_custom_fields():
 					"reqd": 1,
 					"insert_after": "disabled",
 				}
-			]
+			],
+			# Stripe integration links (see payments.payment_gateways.stripe_*)
+			"Customer": [
+				{
+					"fieldname": "stripe_customer_id",
+					"fieldtype": "Data",
+					"label": "Stripe Customer ID",
+					"read_only": 1,
+					"no_copy": 1,
+					"print_hide": 1,
+					"insert_after": "default_currency",
+				}
+			],
+			"Subscription": [
+				{
+					"fieldname": "stripe_subscription_id",
+					"fieldtype": "Data",
+					"label": "Stripe Subscription ID",
+					"read_only": 1,
+					"no_copy": 1,
+					"print_hide": 1,
+					"insert_after": "status",
+				},
+				{
+					"fieldname": "stripe_customer_id",
+					"fieldtype": "Data",
+					"label": "Stripe Customer ID",
+					"read_only": 1,
+					"no_copy": 1,
+					"print_hide": 1,
+					"insert_after": "stripe_subscription_id",
+				},
+			],
+			"Payment Entry": [
+				{
+					"fieldname": "stripe_payment_intent",
+					"fieldtype": "Data",
+					"label": "Stripe Payment Intent",
+					"read_only": 1,
+					"no_copy": 1,
+					"print_hide": 1,
+					"insert_after": "reference_no",
+				}
+			],
 		}
 
 		create_custom_fields(custom_fields)
 
 
 def delete_custom_fields():
+	# Stripe integration custom fields on ERPNext doctypes
+	if "erpnext" in frappe.get_installed_apps():
+		click.secho("* Uninstalling Stripe Custom Fields")
+		stripe_custom_fields = {
+			"Customer": ("stripe_customer_id",),
+			"Subscription": ("stripe_subscription_id", "stripe_customer_id"),
+			"Payment Entry": ("stripe_payment_intent",),
+		}
+		for dt, fieldnames in stripe_custom_fields.items():
+			frappe.db.delete("Custom Field", {"dt": dt, "fieldname": ("in", fieldnames)})
+			frappe.clear_cache(doctype=dt)
+
 	if not frappe.get_meta("Web Form").has_field("payments_tab"):
 		return
 
