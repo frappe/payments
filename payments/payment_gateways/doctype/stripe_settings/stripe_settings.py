@@ -168,6 +168,17 @@ class StripeSettings(Document):
 		call_hook_method("payment_gateway_enabled", gateway="Stripe-" + self.gateway_name)
 		if not self.flags.ignore_mandatory:
 			self.validate_stripe_credentails()
+		self.set_webhook_endpoint()
+		clear_webhook_secret_cache()
+
+	def on_trash(self):
+		clear_webhook_secret_cache()
+
+	def set_webhook_endpoint(self):
+		"""Show the admin which URL to register as a Stripe webhook endpoint."""
+		endpoint = get_url("/api/method/payments.payment_gateways.doctype.stripe_settings.webhooks")
+		if self.webhook_endpoint != endpoint:
+			self.db_set("webhook_endpoint", endpoint, update_modified=False)
 
 	def validate_stripe_credentails(self):
 		if self.publishable_key and self.secret_key:
@@ -297,7 +308,11 @@ class StripeSettings(Document):
 		return {"client_secret": intent.client_secret, "payment_intent": intent.id}
 
 	def create_payment_intent_on_stripe(self):
-		"""Confirm a one-off payment via PaymentIntents (SCA/3DS ready)."""
+		"""Confirm a one-off payment via PaymentIntents (SCA/3DS ready).
+
+		Server-side create+confirm path (a direct payment_method or a legacy
+		card token). The embedded flow goes through finalize_payment_intent_by_id.
+		"""
 		client = self.stripe
 		try:
 			payment_method = self.data.get("payment_method")
@@ -646,6 +661,13 @@ def get_gateway_controller(doctype, docname, payment_gateway=None):
 		reference_doc = frappe.get_doc(doctype, docname)
 		payment_gateway = reference_doc.payment_gateway
 	return frappe.db.get_value("Payment Gateway", payment_gateway, "gateway_controller")
+
+
+def clear_webhook_secret_cache():
+	# Single source of the cache key lives in this package's __init__ (the reader).
+	from payments.payment_gateways.doctype.stripe_settings import clear_cache
+
+	clear_cache()
 
 
 def _success_redirect(metadata):

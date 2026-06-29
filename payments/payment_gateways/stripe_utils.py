@@ -136,8 +136,8 @@ def _find_stripe_customer_by_party(client, customer):
 		result = client.customers.search(
 			{"query": f"metadata['erpnext_customer']:'{safe_customer}'", "limit": 1}
 		)
-	except Exception:
-		return None  # search index unavailable / eventual-consistency miss
+	except stripe.error.StripeError:
+		return None  # search unavailable / eventual-consistency miss; other errors surface
 	for obj in result.get("data") or []:
 		if not obj.get("deleted"):
 			return obj.id
