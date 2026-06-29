@@ -15,6 +15,7 @@ var checkoutData = {
 var elements;
 var paymentElement;
 var clientSecret;
+var paymentIntentId;
 
 function showError(message) {
 	var displayError = document.getElementById('card-errors');
@@ -56,6 +57,7 @@ function mountPaymentElement() {
 				return;
 			}
 			clientSecret = r.message.client_secret;
+			paymentIntentId = r.message.payment_intent;
 			elements = stripe.elements({ clientSecret: clientSecret });
 			paymentElement = elements.create('payment', {
 				defaultValues: {
@@ -76,6 +78,31 @@ function confirmPayment() {
 		return;
 	}
 	setSubmitting(true);
+	recordConsentThen(doConfirm);
+}
+
+function recordConsentThen(next) {
+	// Record save-card consent before confirming, so cards store only on opt-in.
+	if (!$('#save-card').is(':checked') || !paymentIntentId) {
+		next();
+		return;
+	}
+	frappe.call({
+		method: "payments.templates.pages.stripe_checkout.set_card_consent",
+		headers: { "X-Requested-With": "XMLHttpRequest" },
+		args: {
+			payment_intent: paymentIntentId,
+			client_secret: clientSecret,
+			reference_doctype: checkoutData.reference_doctype,
+			reference_docname: checkoutData.reference_docname,
+			payment_gateway: checkoutData.payment_gateway
+		},
+		// Don't block payment if the consent write fails; the card just won't be saved.
+		always: function () { next(); }
+	});
+}
+
+function doConfirm() {
 	stripe.confirmPayment({
 		elements: elements,
 		redirect: 'if_required',
@@ -106,12 +133,19 @@ function confirmPayment() {
 				callback: function (r) {
 					var msg = r.message || {};
 					$('#submit').hide();
-					if (msg.status === "Completed") {
+					if (msg.status === "Completed" || msg.status === "Pending") {
+						// Pending = async method (ACH/SEPA) accepted and still settling, not a failure.
 						$('.success').show();
 					} else {
 						$('.error').show();
 					}
 					redirectAfter(msg);
+				},
+				error: function () {
+					// Payment already captured; keep the button disabled to avoid a double-charge.
+					$('#submit').hide();
+					showError(__('Your payment was received and is being processed. Please do not pay again — if anything looks wrong, contact us.'));
+					$('.error').hide();
 				}
 			});
 		} else {

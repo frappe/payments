@@ -1,6 +1,7 @@
 # Copyright (c) 2017, Frappe Technologies and contributors
 # License: MIT. See LICENSE
 
+import hmac
 from types import MappingProxyType
 from urllib.parse import quote, urlencode
 
@@ -12,6 +13,7 @@ from frappe.model.document import Document
 from frappe.utils import call_hook_method, flt, get_url
 
 from payments.payment_gateways.stripe_utils import (
+	get_or_create_customer,
 	get_stripe_client,
 	idempotency_key,
 	to_minor_units,
@@ -213,11 +215,53 @@ class StripeSettings(Document):
 		}
 		return {k: str(v) for k, v in meta.items() if v is not None}
 
+	def get_party_for_reference(self, data):
+		"""Resolve the ERPNext Customer behind a payment's reference document."""
+		dt, dn = data.get("reference_doctype"), data.get("reference_docname")
+		if not dt or not dn or not frappe.db.exists(dt, dn):
+			return None
+		if dt == "Payment Request":
+			row = frappe.db.get_value("Payment Request", dn, ["party_type", "party"], as_dict=True)
+			if row and row.party_type == "Customer":
+				return row.party
+			return None
+		if frappe.get_meta(dt).has_field("customer"):
+			return frappe.db.get_value(dt, dn, "customer")
+		return None
+
+	def resolve_stripe_customer(self, client, data):
+		"""Reusable Stripe customer id for this payment's party (saves the card for reuse)."""
+		party = self.get_party_for_reference(data)
+		return get_or_create_customer(
+			client,
+			customer=party,
+			email=data.get("payer_email"),
+			name=data.get("payer_name") or party,
+		)
+
+	def create_setup_intent_for_card(self, data):
+		"""SetupIntent to save a card off-session without charging (for later reuse)."""
+		data = frappe._dict(data)
+		client = get_stripe_client(self)
+		customer_id = self.resolve_stripe_customer(client, data)
+		intent = client.setup_intents.create(
+			{
+				"customer": customer_id,
+				"usage": "off_session",
+				"metadata": self.get_stripe_metadata(data=data),
+			}
+		)
+		return {"client_secret": intent.client_secret, "setup_intent": intent.id, "customer": customer_id}
+
 	def create_request(self, data):
 		self.data = frappe._dict(data)
 		self.stripe = get_stripe_client(self)
 
 		try:
+			if self.data.get("payment_intent"):
+				# Embedded flow already confirmed client-side; reuse the stamped Integration Request.
+				return self.finalize_payment_intent_by_id(self.data.get("payment_intent"))
+
 			self.integration_request = create_request_log(self.data, service_name="Stripe")
 			return self.create_payment_intent_on_stripe()
 
@@ -246,12 +290,14 @@ class StripeSettings(Document):
 			return reused
 
 		integration_request = create_request_log(data, service_name="Stripe")
+		customer_id = self.resolve_stripe_customer(client, data)
 		intent = client.payment_intents.create(
 			{
 				"amount": to_minor_units(data.amount, data.currency),
 				"currency": (data.currency or "").lower(),
 				"description": data.get("description"),
 				"receipt_email": data.get("payer_email"),
+				"customer": customer_id,
 				"metadata": self.get_stripe_metadata(data=data, integration_request=integration_request.name),
 				"automatic_payment_methods": {"enabled": True, "allow_redirects": "never"},
 			}
@@ -298,39 +344,36 @@ class StripeSettings(Document):
 		"""Confirm a one-off payment via PaymentIntents (SCA/3DS ready)."""
 		client = self.stripe
 		try:
-			pi_id = self.data.get("payment_intent")
-			if pi_id:
-				# Embedded flow: the PaymentElement already confirmed client-side.
-				intent = client.payment_intents.retrieve(pi_id)
-				self.assert_intent_matches_reference(intent)
-			else:
-				payment_method = self.data.get("payment_method")
-				if not payment_method and self.data.get("stripe_token_id"):
-					# Backward-compat: convert a legacy card token to a PaymentMethod.
-					payment_method = client.payment_methods.create(
-						{"type": "card", "card": {"token": self.data.get("stripe_token_id")}}
-					).id
-				intent = client.payment_intents.create(
-					{
-						"amount": to_minor_units(self.data.amount, self.data.currency),
-						"currency": (self.data.currency or "").lower(),
-						"payment_method": payment_method,
-						"confirm": bool(payment_method),
-						"description": self.data.get("description"),
-						"receipt_email": self.data.get("payer_email"),
-						"metadata": self.get_stripe_metadata(
-							integration_request=self.integration_request.name
-						),
-						"automatic_payment_methods": {"enabled": True, "allow_redirects": "never"},
-					},
-					# Key on the payment method so a network retry of the SAME attempt
-					# de-dupes, while a fresh attempt (new method) creates a new charge.
-					{
-						"idempotency_key": idempotency_key(
-							"pi", self.data.get("reference_docname"), self.data.get("amount"), payment_method
-						)
-					},
-				)
+			payment_method = self.data.get("payment_method")
+			if not payment_method and self.data.get("stripe_token_id"):
+				# Backward-compat: convert a legacy card token to a PaymentMethod.
+				payment_method = client.payment_methods.create(
+					{"type": "card", "card": {"token": self.data.get("stripe_token_id")}}
+				).id
+			customer_id = self.resolve_stripe_customer(client, self.data)
+			params = {
+				"amount": to_minor_units(self.data.amount, self.data.currency),
+				"currency": (self.data.currency or "").lower(),
+				"payment_method": payment_method,
+				"confirm": bool(payment_method),
+				"description": self.data.get("description"),
+				"receipt_email": self.data.get("payer_email"),
+				"customer": customer_id,
+				"metadata": self.get_stripe_metadata(integration_request=self.integration_request.name),
+				"automatic_payment_methods": {"enabled": True, "allow_redirects": "never"},
+			}
+			# Store the card for off-session reuse only with explicit consent.
+			if self.data.get("save_card") and customer_id:
+				params["setup_future_usage"] = "off_session"
+			intent = client.payment_intents.create(
+				params,
+				# Idempotency key on the payment method dedupes a retry of the same attempt.
+				{
+					"idempotency_key": idempotency_key(
+						"pi", self.data.get("reference_docname"), self.data.get("amount"), payment_method
+					)
+				},
+			)
 			return self.handle_payment_intent_status(intent)
 
 		except stripe.error.CardError as e:
@@ -380,6 +423,80 @@ class StripeSettings(Document):
 				_("This payment does not belong to the order being settled."), frappe.PermissionError
 			)
 
+	def finalize_payment_intent_by_id(self, pi_id):
+		"""Retrieve a (client-confirmed) PaymentIntent and finalize idempotently."""
+		client = getattr(self, "stripe", None) or get_stripe_client(self)
+		intent = client.payment_intents.retrieve(pi_id)
+		# Reject a PaymentIntent minted for a different order before settling.
+		self.assert_intent_matches_reference(intent)
+
+		if intent.status == "succeeded":
+			return self.finalize_payment_intent(intent)
+		if intent.status in ("requires_action", "requires_confirmation"):
+			return {
+				"requires_action": True,
+				"client_secret": intent.client_secret,
+				"payment_intent": intent.id,
+				"status": "Pending",
+			}
+		if intent.status == "processing":
+			# Async method still settling; the payment_intent.succeeded webhook finalizes it.
+			return {"redirect_to": _success_redirect(dict(intent.get("metadata") or {})), "status": "Pending"}
+		return {"redirect_to": "payment-failed", "status": "Failed"}
+
+	def finalize_payment_intent(self, intent, integration_request=None):
+		"""Mark the original Integration Request complete and run on_payment_authorized.
+
+		Idempotent: callable from the synchronous return AND the webhook. Keyed on
+		the Integration Request stamped in the intent's metadata, so it runs once.
+		"""
+		metadata = dict(intent.get("metadata") or {})
+		ir_name = integration_request or metadata.get("integration_request")
+		if ir_name and frappe.db.exists("Integration Request", ir_name):
+			self.integration_request = frappe.get_doc("Integration Request", ir_name)
+		else:
+			ir = frappe.db.get_value("Integration Request", {"output": intent.get("id")}, "name")
+			self.integration_request = (
+				frappe.get_doc("Integration Request", ir)
+				if ir
+				else create_request_log(intent, service_name="Stripe")
+			)
+
+		if self.integration_request.status == "Completed":
+			return {"redirect_to": _success_redirect(metadata), "status": "Completed"}
+
+		if not self.claim_integration_request():
+			# Lost the race to a concurrent webhook/redirect — already settled.
+			return {"redirect_to": _success_redirect(metadata), "status": "Completed"}
+
+		self.data = frappe._dict(
+			{
+				"reference_doctype": metadata.get("reference_doctype"),
+				"reference_docname": metadata.get("reference_docname"),
+			}
+		)
+		self.integration_request.db_set("output", intent.get("id"), update_modified=False)
+		self.flags.status_changed_to = "Completed"
+		return self.finalize_request()
+
+	def enable_setup_future_usage(self, payment_intent, client_secret, reference_doctype, reference_docname):
+		"""Enable off-session reuse on an unconfirmed PaymentIntent (explicit consent)."""
+		client = get_stripe_client(self)
+		intent = client.payment_intents.retrieve(payment_intent)
+		# Ownership proof: only the browser that created the intent holds its client_secret.
+		if not client_secret or not hmac.compare_digest(intent.client_secret or "", client_secret):
+			frappe.throw(_("Invalid payment session."), frappe.PermissionError)
+		self.data = frappe._dict(
+			{"reference_doctype": reference_doctype, "reference_docname": reference_docname}
+		)
+		self.assert_intent_matches_reference(intent)
+		if intent.status not in ("requires_payment_method", "requires_confirmation"):
+			return {"updated": False}
+		if not intent.get("customer"):
+			return {"updated": False}
+		client.payment_intents.update(payment_intent, {"setup_future_usage": "off_session"})
+		return {"updated": True}
+
 	def create_checkout_session(self, data):
 		"""Hosted Checkout: build a Stripe-hosted payment page and return its URL."""
 		# Local import avoids a circular import (stripe_checkout imports this module).
@@ -401,6 +518,7 @@ class StripeSettings(Document):
 			+ quote(self.name)
 		)
 		metadata = self.get_stripe_metadata(data=data, integration_request=integration_request.name)
+		customer_id = self.resolve_stripe_customer(client, data)
 
 		session = client.checkout.sessions.create(
 			{
@@ -420,9 +538,11 @@ class StripeSettings(Document):
 				"success_url": success_url,
 				"cancel_url": get_url("payment-failed"),
 				"client_reference_id": data.get("reference_docname"),
-				"customer_email": data.get("payer_email"),
+				"customer": customer_id,
 				"payment_intent_data": {"metadata": metadata},
 				"metadata": metadata,
+				# Stripe renders its own opt-in checkbox; card saved only if the buyer ticks it.
+				"saved_payment_method_options": {"payment_method_save": "enabled"},
 			}
 		)
 		integration_request.db_set("output", session.id, update_modified=False)

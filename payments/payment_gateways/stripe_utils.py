@@ -9,6 +9,7 @@
 import hashlib
 
 import frappe
+import stripe
 from frappe.utils import flt
 
 # Pin the Stripe API version to the one bundled with stripe~=10.12 so behaviour
@@ -86,6 +87,63 @@ def idempotency_key(*parts):
 	return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def get_or_create_customer(client, customer=None, email=None, name=None):
+	"""Return a Stripe customer id, reusing Customer.stripe_customer_id when possible.
+
+	`customer` is the ERPNext Customer name (optional). When given, the resolved
+	Stripe id is cached back onto Customer.stripe_customer_id so the same Stripe
+	customer is reused for every future charge / subscription of that party.
+	"""
+	has_field = bool(customer) and frappe.db.has_column("Customer", "stripe_customer_id")
+
+	# Reuse the id cached on the Customer.
+	if has_field:
+		existing = frappe.db.get_value("Customer", customer, "stripe_customer_id")
+		if existing:
+			try:
+				obj = client.customers.retrieve(existing)
+				if not obj.get("deleted"):
+					return existing
+			except stripe.error.InvalidRequestError:
+				pass  # stale / deleted id — fall through; other errors surface, not swallowed
+
+	# Recover a Stripe customer by metadata to dedupe a prior rolled-back attempt.
+	if customer:
+		found = _find_stripe_customer_by_party(client, customer)
+		if found:
+			if has_field:
+				frappe.db.set_value("Customer", customer, "stripe_customer_id", found, update_modified=False)
+			return found
+
+	# Create; name/email can differ per call so no idempotency key (metadata dedupes).
+	obj = client.customers.create(
+		{
+			"email": email,
+			"name": name or customer,
+			"metadata": {"erpnext_customer": customer} if customer else {},
+		}
+	)
+	if has_field:
+		frappe.db.set_value("Customer", customer, "stripe_customer_id", obj.id, update_modified=False)
+	return obj.id
+
+
+def _find_stripe_customer_by_party(client, customer):
+	"""Find a non-deleted Stripe customer previously created for this ERPNext party."""
+	# Escape quotes so an apostrophe in the party name can't break the search query.
+	safe_customer = customer.replace("\\", "\\\\").replace("'", "\\'")
+	try:
+		result = client.customers.search(
+			{"query": f"metadata['erpnext_customer']:'{safe_customer}'", "limit": 1}
+		)
+	except Exception:
+		return None  # search index unavailable / eventual-consistency miss
+	for obj in result.get("data") or []:
+		if not obj.get("deleted"):
+			return obj.id
+	return None
+
+
 def get_stripe_settings_for_gateway(payment_gateway_account):
 	"""Resolve a Payment Gateway Account name to its Stripe Settings doc.
 
@@ -100,6 +158,7 @@ def get_stripe_settings_for_gateway(payment_gateway_account):
 	if not gw or gw.gateway_settings != "Stripe Settings":
 		return None
 	if not gw.gateway_controller:
-		# Gateway relies on the naming-convention fallback;
-		return None
+		# No explicit controller: use the sole Stripe Settings record if unambiguous.
+		names = frappe.get_all("Stripe Settings", pluck="name", limit=2)
+		return frappe.get_doc("Stripe Settings", names[0]) if len(names) == 1 else None
 	return frappe.get_doc("Stripe Settings", gw.gateway_controller)
