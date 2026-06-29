@@ -109,12 +109,18 @@ doc_events = {
 	},
 }
 
+# include js in doctype views
+doctype_js = {"Payment Entry": "public/js/payment_entry_stripe.js"}
+
 # Scheduled Tasks
 # ---------------
 
 scheduler_events = {
 	"all": [
 		"payments.payment_gateways.doctype.razorpay_settings.razorpay_settings.capture_payment",
+	],
+	"hourly": [
+		"payments.payment_gateways.stripe_reconcile.sweep_pending",
 	],
 }
 

@@ -275,6 +275,18 @@ class StripeSettings(Document):
 		)
 		return {"client_secret": intent.client_secret, "setup_intent": intent.id, "customer": customer_id}
 
+	def refund_intent(self, payment_intent, amount=None):
+		"""Refund a PaymentIntent. The ledger entry follows via the charge.refunded webhook."""
+		client = get_stripe_client(self)
+		params = {"payment_intent": payment_intent}
+		if amount:
+			pi = client.payment_intents.retrieve(payment_intent)
+			params["amount"] = to_minor_units(amount, pi.currency)
+		refund = client.refunds.create(
+			params, {"idempotency_key": idempotency_key("refund", payment_intent, amount or "full")}
+		)
+		return {"refund": refund.id, "status": refund.status}
+
 	def create_request(self, data):
 		self.data = frappe._dict(data)
 		self.stripe = get_stripe_client(self)
@@ -728,13 +740,6 @@ def get_gateway_controller(doctype, docname, payment_gateway=None):
 	return frappe.db.get_value("Payment Gateway", payment_gateway, "gateway_controller")
 
 
-def clear_webhook_secret_cache():
-	# Single source of the cache key lives in this package's __init__ (the reader).
-	from payments.payment_gateways.doctype.stripe_settings import clear_cache
-
-	clear_cache()
-
-
 def _success_redirect(metadata):
 	"""payment-success URL carrying the reference, so the success page can load it."""
 	dt = (metadata or {}).get("reference_doctype")
@@ -742,6 +747,39 @@ def _success_redirect(metadata):
 	if dt and dn:
 		return f"payment-success?{urlencode({'doctype': dt, 'docname': dn})}"
 	return "payment-success"
+
+
+def clear_webhook_secret_cache():
+	# Single source of the cache key lives in this package's __init__ (the reader).
+	from payments.payment_gateways.doctype.stripe_settings import clear_cache
+
+	clear_cache()
+
+
+@frappe.whitelist()
+def refund_payment_entry(payment_entry, amount=None):
+	"""Refund a Stripe-originated Payment Entry. Books are updated by the webhook."""
+	pi = frappe.db.get_value("Payment Entry", payment_entry, "stripe_payment_intent")
+	if not pi:
+		frappe.throw(_("This Payment Entry has no linked Stripe payment to refund."))
+
+	settings = _settings_owning_intent(pi)
+	if not settings:
+		frappe.throw(_("Could not find the Stripe account that owns this payment."))
+
+	return settings.refund_intent(pi, flt(amount) if amount else None)
+
+
+def _settings_owning_intent(payment_intent):
+	"""Find which Stripe account a PaymentIntent belongs to (supports multiple accounts)."""
+	for name in frappe.get_all("Stripe Settings", pluck="name"):
+		settings = frappe.get_doc("Stripe Settings", name)
+		try:
+			get_stripe_client(settings).payment_intents.retrieve(payment_intent)
+			return settings
+		except Exception:
+			continue
+	return None
 
 
 @frappe.whitelist(allow_guest=True)

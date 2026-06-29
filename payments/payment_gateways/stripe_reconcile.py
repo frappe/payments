@@ -8,6 +8,7 @@ import stripe
 from frappe.utils import flt, getdate, now_datetime
 
 from payments.payment_gateways.stripe_utils import (
+	from_minor_units,
 	get_stripe_client,
 	link_stripe_subscription,
 )
@@ -254,6 +255,58 @@ def handle_setup_intent_succeeded(event, settings):
 	return {"status_label": "Processed"}
 
 
+def process_refund(event, settings):
+	"""charge.refunded — flag the linked Payment Entry with the refund details.
+
+	The Stripe refund is recorded against the Payment Entry as a comment rather
+	than auto-posting a credit note, so the accounting reversal stays an explicit,
+	auditable action (avoids silently mutating the ledger from a webhook).
+	"""
+	charge = event["data"]["object"]
+	pi = charge.get("payment_intent")
+	pe = (
+		frappe.db.get_value("Payment Entry", {"stripe_payment_intent": pi, "docstatus": 1}, "name")
+		if pi
+		else None
+	)
+	if not pe:
+		return {"status_label": "Ignored"}
+
+	amount = from_minor_units(charge.get("amount_refunded", 0), charge.get("currency"))
+	frappe.get_doc("Payment Entry", pe).add_comment(
+		"Comment",
+		frappe._("Stripe refund processed: {0} {1} (charge {2}). Post a credit note / reversal if required.").format(
+			amount, (charge.get("currency") or "").upper(), charge.get("id")
+		),
+	)
+	return {"status_label": "Processed", "reference_doctype": "Payment Entry", "reference_name": pe}
+
+
+def sweep_pending():
+	"""Scheduler: retry webhook events that failed processing (dropped/erroring deliveries)."""
+	rows = frappe.get_all(
+		"Stripe Webhook Log", filters={"status": "Failed"}, fields=["name", "stripe_settings", "payload"], limit=50
+	)
+	for row in rows:
+		try:
+			event = frappe.parse_json(row.payload)
+			settings = (
+				frappe.get_doc("Stripe Settings", row.stripe_settings) if row.stripe_settings else None
+			)
+			result = route_event(event, settings) or {}
+			frappe.db.set_value(
+				"Stripe Webhook Log",
+				row.name,
+				"status",
+				result.get("status_label", "Processed"),
+				update_modified=False,
+			)
+			frappe.db.commit()
+		except Exception:
+			frappe.db.rollback()
+			frappe.log_error(frappe.get_traceback(), "Stripe webhook sweep failed")
+
+
 _HANDLERS = {
 	"checkout.session.completed": reconcile_checkout_session,
 	"payment_intent.succeeded": reconcile_one_off,
@@ -262,4 +315,5 @@ _HANDLERS = {
 	"invoice.payment_failed": mark_dunning,
 	"customer.subscription.updated": sync_subscription_status,
 	"customer.subscription.deleted": sync_subscription_status,
+	"charge.refunded": process_refund,
 }
