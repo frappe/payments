@@ -211,10 +211,21 @@ class StripeSettings(Document):
 				)
 
 	def get_payment_url(self, **kwargs):
+		# Subscriptions use Hosted Checkout so Stripe sets up recurring billing natively.
+		if self.is_subscription_reference(kwargs):
+			return self.create_checkout_session(kwargs)
 		if (self.checkout_mode or "Hosted Checkout") == "Hosted Checkout":
 			return self.create_checkout_session(kwargs)
 		# Embedded Elements: render the on-site card form (PaymentElement).
 		return get_url(f"./stripe_checkout?{urlencode(kwargs)}")
+
+	def is_subscription_reference(self, data):
+		dt, dn = data.get("reference_doctype"), data.get("reference_docname")
+		if not dt or not dn or not frappe.db.exists(dt, dn):
+			return False
+		if not frappe.get_meta(dt).has_field("is_a_subscription"):
+			return False
+		return bool(frappe.db.get_value(dt, dn, "is_a_subscription"))
 
 	def get_stripe_metadata(self, data=None, integration_request=None):
 		"""Stripe metadata is string->string; drop empty values."""
@@ -491,31 +502,34 @@ class StripeSettings(Document):
 		metadata = self.get_stripe_metadata(data=data, integration_request=integration_request.name)
 		customer_id = self.resolve_stripe_customer(client, data)
 
-		session = client.checkout.sessions.create(
-			{
-				"mode": "payment",
-				"line_items": [
-					{
-						"price_data": {
-							"currency": (data.currency or "").lower(),
-							"unit_amount": to_minor_units(data.amount, data.currency),
-							"product_data": {
-								"name": data.get("description") or data.get("title") or _("Payment")
+		if self.is_subscription_reference(data):
+			session = self._create_subscription_checkout(client, data, customer_id, metadata, success_url)
+		else:
+			session = client.checkout.sessions.create(
+				{
+					"mode": "payment",
+					"line_items": [
+						{
+							"price_data": {
+								"currency": (data.currency or "").lower(),
+								"unit_amount": to_minor_units(data.amount, data.currency),
+								"product_data": {
+									"name": data.get("description") or data.get("title") or _("Payment")
+								},
 							},
-						},
-						"quantity": 1,
-					}
-				],
-				"success_url": success_url,
-				"cancel_url": get_url("payment-failed"),
-				"client_reference_id": data.get("reference_docname"),
-				"customer": customer_id,
-				"payment_intent_data": {"metadata": metadata},
-				"metadata": metadata,
-				# Stripe renders its own opt-in checkbox; card saved only if the buyer ticks it.
-				"saved_payment_method_options": {"payment_method_save": "enabled"},
-			}
-		)
+							"quantity": 1,
+						}
+					],
+					"success_url": success_url,
+					"cancel_url": get_url("payment-failed"),
+					"client_reference_id": data.get("reference_docname"),
+					"customer": customer_id,
+					"payment_intent_data": {"metadata": metadata},
+					"metadata": metadata,
+					# Stripe renders its own opt-in checkbox; card saved only if the buyer ticks it.
+					"saved_payment_method_options": {"payment_method_save": "enabled"},
+				}
+			)
 		integration_request.db_set("output", session.id, update_modified=False)
 		return session.url
 
@@ -535,6 +549,57 @@ class StripeSettings(Document):
 			return False
 		self.integration_request.db_set("status", "Completed", update_modified=False)
 		return True
+
+	def _create_subscription_checkout(self, client, data, customer_id, metadata, success_url):
+		"""Hosted Checkout in subscription mode (both billing models)."""
+		from payments.payment_gateways.stripe_utils import (
+			find_erpnext_subscription,
+			get_subscription_line_items,
+		)
+
+		dt, dn = data.get("reference_doctype"), data.get("reference_docname")
+		line_items = get_subscription_line_items(dt, dn)
+
+		party = self.get_party_for_reference(data)
+		plan_names = [
+			row.plan
+			for row in frappe.get_all(
+				"Subscription Plan Detail",
+				filters={"parent": dn, "parenttype": dt},
+				fields=["plan"],
+			)
+		]
+		sub_metadata = dict(metadata)
+		erpnext_sub = find_erpnext_subscription(party, plan_names)
+		if erpnext_sub:
+			sub_metadata["erpnext_subscription"] = erpnext_sub
+		if party:
+			sub_metadata["erpnext_customer"] = party
+
+		subscription_data = {"metadata": sub_metadata}
+
+		if (self.subscription_billing_model or "") == "Charge Now + Defer First Cycle":
+			# A one-off charge can't ride in subscription-mode line_items; this model needs a
+			# separate first-invoice charge (not yet implemented). Fail clearly for now.
+			frappe.throw(
+				_(
+					"The 'Charge Now + Defer First Cycle' billing model is not supported yet — "
+					"please use 'Bill From Cycle One'."
+				)
+			)
+
+		return client.checkout.sessions.create(
+			{
+				"mode": "subscription",
+				"line_items": line_items,
+				"success_url": success_url,
+				"cancel_url": get_url("payment-failed"),
+				"client_reference_id": dn,
+				"customer": customer_id,
+				"metadata": sub_metadata,
+				"subscription_data": subscription_data,
+			}
+		)
 
 	def finalize_checkout_session(self, session_id):
 		"""Confirm a Hosted Checkout session and run on_payment_authorized.

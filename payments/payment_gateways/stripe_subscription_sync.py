@@ -56,12 +56,13 @@ def sync_stripe_price(doc, method=None):
 
 	try:
 		product_id = None
+		old_price_id = None
 		if doc.product_price_id:
 			existing = client.prices.retrieve(doc.product_price_id)
 			if _matches(existing, unit_amount, doc.currency, recurring):
 				return  # already in sync — no API write
 			product_id = existing.product  # reuse same Product
-			client.prices.update(doc.product_price_id, {"active": False})  # archive (prices are immutable)
+			old_price_id = doc.product_price_id  # archive only after the new price is live
 
 		if not product_id:
 			product_id = client.products.create(
@@ -79,6 +80,10 @@ def sync_stripe_price(doc, method=None):
 		)
 		# We run on_update (after the row is written), so persist directly.
 		doc.db_set("product_price_id", price.id, update_modified=False)
+
+		if old_price_id:
+			# New price is persisted; safe to archive the old one (prices are immutable).
+			client.prices.update(old_price_id, {"active": False})
 
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "Stripe price sync failed")

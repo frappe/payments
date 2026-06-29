@@ -144,6 +144,73 @@ def _find_stripe_customer_by_party(client, customer):
 	return None
 
 
+def get_subscription_plan_details(reference_doctype, reference_docname):
+	"""The (plan, qty) rows behind a subscription's Payment Request."""
+	return frappe.get_all(
+		"Subscription Plan Detail",
+		filters={"parent": reference_docname, "parenttype": reference_doctype},
+		fields=["plan", "qty"],
+		order_by="idx",
+	)
+
+
+def get_subscription_line_items(reference_doctype, reference_docname):
+	"""Stripe subscription items [{price, quantity}] from the synced plan prices."""
+	items = []
+	for row in get_subscription_plan_details(reference_doctype, reference_docname):
+		price = frappe.db.get_value("Subscription Plan", row.plan, "product_price_id")
+		if not price:
+			frappe.throw(
+				frappe._("Subscription Plan {0} is not synced to Stripe yet; save the plan first.").format(
+					row.plan
+				)
+			)
+		items.append({"price": price, "quantity": row.qty or 1})
+	return items
+
+
+def find_erpnext_subscription(party, plan_names):
+	"""Best-effort match of an active ERPNext Subscription by party + plan set.
+
+	The Stripe subscription is created from a Payment Request, while ERPNext's
+	Subscription doctype is what generates the recurring Sales Invoices; they are
+	not linked natively. This finds the Subscription whose plans cover the paid
+	plans so we can stamp the Stripe id onto it. The webhook later corrects this
+	authoritatively from the Stripe subscription metadata.
+	"""
+	if not party or not plan_names or not frappe.db.exists("DocType", "Subscription"):
+		return None
+	candidates = frappe.get_all(
+		"Subscription",
+		filters={"party": party, "status": ("in", ["Active", "Trialing", "Trial"])},
+		pluck="name",
+		order_by="creation desc",
+	)
+	for name in candidates:
+		plans = set(
+			frappe.get_all(
+				"Subscription Plan Detail",
+				filters={"parent": name, "parenttype": "Subscription"},
+				pluck="plan",
+			)
+		)
+		if set(plan_names).issubset(plans):
+			return name
+	return None
+
+
+def link_stripe_subscription(erpnext_subscription, stripe_subscription_id, stripe_customer_id=None):
+	"""Stamp the Stripe ids onto an ERPNext Subscription (the reconciliation link)."""
+	if not erpnext_subscription:
+		return
+	if not frappe.db.has_column("Subscription", "stripe_subscription_id"):
+		return  # custom-field patch not applied yet
+	values = {"stripe_subscription_id": stripe_subscription_id}
+	if stripe_customer_id and frappe.db.has_column("Subscription", "stripe_customer_id"):
+		values["stripe_customer_id"] = stripe_customer_id
+	frappe.db.set_value("Subscription", erpnext_subscription, values, update_modified=False)
+
+
 def get_stripe_settings_for_gateway(payment_gateway_account):
 	"""Resolve a Payment Gateway Account name to its Stripe Settings doc.
 
