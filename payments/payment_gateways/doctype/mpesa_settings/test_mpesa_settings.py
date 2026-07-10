@@ -48,8 +48,8 @@ class TestMpesaSettings(PaymentsTestSuite):
 		super().tearDown()
 		for x in frappe.db.get_all("POS Opening Entry"):
 			frappe.get_doc("POS Opening Entry", x.name).cancel().delete()
-		frappe.db.sql("delete from `tabMpesa Settings`")
-		frappe.db.sql("delete from `tabIntegration Request` where integration_request_service = 'Mpesa'")
+		frappe.db.delete("Mpesa Settings")
+		frappe.db.delete("Integration Request", {"integration_request_service": "Mpesa"})
 
 	def test_creation_of_payment_gateway(self, mock_stk_push, mock_get_account_balance):
 		mode_of_payment = create_mode_of_payment("Mpesa-_Test", payment_type="Phone")
