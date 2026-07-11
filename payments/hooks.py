@@ -67,6 +67,7 @@ before_install = "payments.utils.before_install"
 after_install = "payments.utils.after_install"
 
 before_migrate = "payments.utils.validate_erpnext_compatibility"
+after_migrate = "payments.utils.reconcile_erpnext_custom_fields"
 
 # Uninstallation
 # ------------

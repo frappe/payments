@@ -70,6 +70,18 @@ def before_uninstall():
 	delete_payments_erpnext_custom_fields()
 
 
+def reconcile_erpnext_custom_fields():
+	"""Sync ERPNext-integration custom fields with ERPNext's presence on every migrate.
+
+	Creates them when ERPNext is installed, drops the orphaned ones (Link/Table targets
+	gone) when it is not — so ERPNext never has to reach into Payments on uninstall.
+	"""
+	if "erpnext" in frappe.get_installed_apps():
+		make_payments_erpnext_custom_fields()
+	else:
+		delete_payments_erpnext_custom_fields()
+
+
 def make_custom_fields():
 	if not frappe.get_meta("Web Form").has_field("payments_tab"):
 		click.secho("* Installing Payment Custom Fields in Web Form")
@@ -316,7 +328,8 @@ def delete_custom_fields():
 
 
 def delete_payments_erpnext_custom_fields():
-	if "erpnext" not in frappe.get_installed_apps() or "payments" not in frappe.get_installed_apps():
+	# Only requires Payments: also runs when ERPNext has been removed, to drop orphan fields.
+	if "payments" not in frappe.get_installed_apps():
 		return
 
 	custom_fields = {
@@ -336,7 +349,7 @@ def delete_payments_erpnext_custom_fields():
 	}
 
 	for doctype, fieldnames in custom_fields.items():
-		if not frappe.get_meta(doctype):
+		if not frappe.db.exists("DocType", doctype):
 			continue
 
 		click.secho(f"* Uninstalling Payments Custom Fields from {doctype}")
