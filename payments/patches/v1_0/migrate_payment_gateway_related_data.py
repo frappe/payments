@@ -15,7 +15,11 @@ def execute():
 
 	PG = DocType("Payment Gateway")
 
-	update_pg_query = frappe.qb.update(PG).set(PG.gateway_name, PG.gateway)
+	update_pg_query = (
+		frappe.qb.update(PG)
+		.set(PG.gateway_name, PG.gateway)
+		.where(PG.gateway_name.isnull() | (PG.gateway_name == ""))
+	)
 	update_pg_query.run()
 
 	PGA = DocType("Payment Gateway Account")
@@ -25,6 +29,7 @@ def execute():
 		.set(PGA.parent, PGA.payment_gateway)
 		.set(PGA.parenttype, "Payment Gateway")
 		.set(PGA.parentfield, "payment_gateway_account")
+		.where(PGA.parent.isnull() | (PGA.parent == ""))
 	)
 	update_pga_query.run()
 
