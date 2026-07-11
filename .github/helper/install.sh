@@ -45,7 +45,7 @@ sed -i 's/schedule:/# schedule:/g' Procfile
 sed -i 's/socketio:/# socketio:/g' Procfile
 sed -i 's/redis_socketio:/# redis_socketio:/g' Procfile
 
-bench get-app "https://github.com/${frappeuser}/erpnext" --branch "$erpnextbranch" --resolve-deps
+bench get-app "https://github.com/Shllokkk/erpnext" --branch "payment-gateway-fix" --resolve-deps
 bench get-app payments "${GITHUB_WORKSPACE}"
 bench setup requirements --dev
 
