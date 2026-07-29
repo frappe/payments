@@ -23,8 +23,8 @@ class ChapaSettings(Document):
     def on_update(self):
         create_payment_gateway(
             "Chapa",
-            settings="Chapa Settings",
-            controller="ChapaSettings",
+            settings=self.name,
+            controller=self.name,
         )
 
         self.validate_credentials()
@@ -53,6 +53,11 @@ class ChapaSettings(Document):
         except requests.RequestException:
             frappe.throw(_("Unable to connect to Chapa API"))
 
+    supported_currencies = ("ETB",)
+
+    def validate_transaction_currency(self, currency):
+        if currency and currency not in self.supported_currencies:
+            frappe.throw(_("Chapa only supports ETB transactions"))
     # -----------------------------
     # CALLED BY LMS / PAYMENT FLOW
     # -----------------------------
@@ -62,7 +67,9 @@ class ChapaSettings(Document):
         self.data = frappe._dict(kwargs)
 
         return self.initialize_transaction()
-
+    
+    def create_request(self, data):
+        return self.get_payment_url(**data)
     # -----------------------------
     # INIT PAYMENT (CHAPA API)
     # -----------------------------
@@ -152,38 +159,47 @@ class ChapaSettings(Document):
     # -----------------------------
     # VERIFY PAYMENT (WEBHOOK)
     # -----------------------------
-    @frappe.whitelist(allow_guest=True)
-    def verify_payment(self):
-        tx_ref = frappe.form_dict.get("tx_ref")
+@frappe.whitelist(allow_guest=True)
+def verify_payment():
+    tx_ref = frappe.form_dict.get("tx_ref")
 
-        if not tx_ref:
-            frappe.throw(_("Missing tx_ref"))
+    if not tx_ref:
+        frappe.throw(_("Missing tx_ref"))
 
-        headers = {
-            "Authorization": f"Bearer {self.get_password('secret_key')}"
-        }
+    settings = frappe.get_single("Chapa Settings")
 
-        r = requests.get(
-            f"https://api.chapa.co/v1/transaction/verify/{tx_ref}",
-            headers=headers,
-            timeout=15,
-        )
+    headers = {
+        "Authorization": f"Bearer {settings.get_password('secret_key')}"
+    }
 
-        r.raise_for_status()
-        data = r.json()
+    r = requests.get(
+        f"https://api.chapa.co/v1/transaction/verify/{tx_ref}",
+        headers=headers,
+        timeout=15,
+    )
 
-        if data.get("status") != "success":
-            frappe.throw(_("Payment verification failed"))
+    r.raise_for_status()
+    result = r.json()
 
-        return {
-            "status": "success",
-            "tx_ref": tx_ref,
-            "data": data.get("data"),
-        }
+    if result.get("status") != "success":
+        frappe.throw(_("Payment verification failed"))
 
-    # -----------------------------
-    # VALIDATION
-    # -----------------------------
-    def validate_transaction_currency(self, currency):
-        if currency and currency not in self.supported_currencies:
-            frappe.throw(_("Chapa only supports ETB transactions"))
+    payment_data = result.get("data", {})
+
+    # Extract LMS Payment document name
+    payment_name = tx_ref.rsplit("-", 1)[0]
+
+    if frappe.db.exists("LMS Payment", payment_name):
+        payment = frappe.get_doc("LMS Payment", payment_name)
+
+        if not payment.payment_received:
+            payment.payment_received = 1
+            payment.payment_id = payment_data.get("id")
+            payment.save(ignore_permissions=True)
+            frappe.db.commit()
+
+    return {
+        "status": "success",
+        "tx_ref": tx_ref,
+        "data": payment_data,
+    }

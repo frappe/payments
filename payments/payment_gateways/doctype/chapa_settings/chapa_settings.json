@@ -261,7 +261,7 @@
  "image_view": 0,
  "in_create": 0,
  "is_submittable": 0,
- "issingle": 0,
+ "issingle": 1,
  "istable": 0,
  "max_attachments": 0,
  "modified": "2022-07-24 14:33:06.050377",
