@@ -739,3 +739,63 @@ def validate_payment_callback(data):
 
 def handle_subscription_notification(doctype, docname):
 	call_hook_method("handle_subscription_notification", doctype=doctype, docname=docname)
+
+
+SUPPORTED_WEBHOOK_EVENTS = {"refund.processed", "refund.failed"}
+
+
+def process_webhook(raw_body: bytes, signature: str) -> str | None:
+	"""Verify and log a Razorpay webhook, returning the Integration Request name.
+
+	Returns None for events this app does not handle. Razorpay retries until it
+	gets a 2xx, so the same event will arrive more than once; subscribers of the
+	`handle_refund_notification` hook must make their own writes idempotent.
+	"""
+	controller = frappe.get_cached_doc("Razorpay Settings")
+	secret = controller.get_password("webhook_secret", raise_exception=False)
+
+	if not secret:
+		# Verifying against an empty key would accept anything anyone signs.
+		frappe.throw(_("Set a Webhook Secret in Razorpay Settings to accept webhooks"))
+
+	body = raw_body.decode()
+	controller.verify_signature(body, signature, secret)
+
+	if frappe.parse_json(body).get("event") not in SUPPORTED_WEBHOOK_EVENTS:
+		return None
+
+	log = frappe.get_doc(
+		{
+			"doctype": "Integration Request",
+			"integration_request_service": "Razorpay",
+			"request_description": "Refund Notification",
+			"data": body,
+			"is_remote_request": 1,
+			"status": "Queued",
+		}
+	).insert(ignore_permissions=True)
+
+	return log.name
+
+
+@frappe.whitelist(allow_guest=True)
+def razorpay_webhook():
+	name = process_webhook(
+		frappe.request.data,
+		frappe.get_request_header("X-Razorpay-Signature", ""),
+	)
+
+	if not name:
+		return
+
+	frappe.db.commit()
+	frappe.enqueue(
+		method="payments.payment_gateways.doctype.razorpay_settings.razorpay_settings.handle_refund_notification",
+		queue="short",
+		doctype="Integration Request",
+		docname=name,
+	)
+
+
+def handle_refund_notification(doctype, docname):
+	call_hook_method("handle_refund_notification", doctype=doctype, docname=docname)

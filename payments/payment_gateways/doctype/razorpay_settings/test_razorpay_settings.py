@@ -1,5 +1,8 @@
 # Copyright (c) 2026, Frappe Technologies and Contributors
 # License: MIT. See LICENSE
+import hashlib
+import hmac
+import json
 from unittest.mock import MagicMock, patch
 
 import frappe
@@ -9,6 +12,7 @@ from frappe.tests import IntegrationTestCase, UnitTestCase
 from payments.payment_gateways.doctype.razorpay_settings.razorpay_settings import (
 	RazorpaySettings,
 	from_paise,
+	process_webhook,
 	to_paise,
 )
 
@@ -121,3 +125,65 @@ class TestRazorpayRefund(IntegrationTestCase):
 				self.settings.refund_payment("pay_123", 10)
 
 		self.assertIn("atleast INR 1.00", str(raised.exception))
+
+
+REFUND_PROCESSED_PAYLOAD = {
+	"event": "refund.processed",
+	"payload": {
+		"refund": {
+			"entity": {
+				"id": "rfnd_1",
+				"status": "processed",
+				"amount": 6000,
+				"payment_id": "pay_123",
+			}
+		}
+	},
+}
+
+
+def sign(body: bytes, secret: str) -> str:
+	return hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+
+
+class TestRazorpayWebhook(IntegrationTestCase):
+	def setUp(self):
+		self.secret = "whsec_test"
+		self.body = json.dumps(REFUND_PROCESSED_PAYLOAD).encode()
+		self.patcher = patch.object(RazorpaySettings, "get_password", return_value=self.secret)
+		self.patcher.start()
+		self.addCleanup(self.patcher.stop)
+
+	def test_rejects_a_bad_signature(self):
+		self.assertRaises(frappe.PermissionError, process_webhook, self.body, "deadbeef")
+
+	def test_rejects_a_webhook_when_no_secret_is_configured(self):
+		# An empty secret is worse than no secret: anyone can compute an HMAC
+		# under an empty key, so the endpoint would accept forged payloads.
+		self.patcher.stop()
+		for unset in (None, ""):
+			with self.subTest(secret=unset):
+				with patch.object(RazorpaySettings, "get_password", return_value=unset):
+					self.assertRaises(
+						frappe.ValidationError, process_webhook, self.body, sign(self.body, unset or "")
+					)
+		self.patcher.start()
+
+	def test_ignores_unsupported_events(self):
+		body = json.dumps(dict(REFUND_PROCESSED_PAYLOAD, event="payment.captured")).encode()
+
+		self.assertIsNone(process_webhook(body, sign(body, self.secret)))
+
+	def test_logs_a_supported_event_as_an_integration_request(self):
+		name = process_webhook(self.body, sign(self.body, self.secret))
+
+		log = frappe.get_doc("Integration Request", name)
+		self.assertEqual(log.status, "Queued")
+		self.assertEqual(json.loads(log.data)["event"], "refund.processed")
+
+	def test_a_rejected_webhook_logs_nothing(self):
+		before = frappe.db.count("Integration Request")
+
+		self.assertRaises(frappe.PermissionError, process_webhook, self.body, "deadbeef")
+
+		self.assertEqual(frappe.db.count("Integration Request"), before)
