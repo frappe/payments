@@ -508,12 +508,10 @@ class RazorpaySettings(Document):
 			return self.get_client().refund.fetch(refund_id)
 
 	def refund_payment(self, payment_id: str, amount: float | None = None) -> dict:
-		"""Refund a captured payment, fully or partially.
+		"""`amount` is in major units; None refunds whatever is still refundable.
 
-		`amount` is in major units (rupees). Pass None to refund whatever is
-		still refundable. Returns the Razorpay refund entity; its `status` is
-		`pending` until Razorpay settles it, so callers should reconcile via
-		`fetch_refund` or the `refund.processed` webhook.
+		The returned refund stays `pending` until Razorpay settles it, so callers
+		reconcile via `fetch_refund` or the `refund.processed` webhook.
 		"""
 		payment = self.fetch_payment(payment_id)
 
@@ -745,11 +743,10 @@ SUPPORTED_WEBHOOK_EVENTS = {"refund.processed", "refund.failed"}
 
 
 def process_webhook(raw_body: bytes, signature: str) -> str | None:
-	"""Verify and log a Razorpay webhook, returning the Integration Request name.
+	"""Verify and log a webhook, returning the Integration Request name.
 
-	Returns None for events this app does not handle. Razorpay retries until it
-	gets a 2xx, so the same event will arrive more than once; subscribers of the
-	`handle_refund_notification` hook must make their own writes idempotent.
+	Returns None for unhandled events. The same event arrives more than once, so
+	subscribers of `handle_refund_notification` must make their writes idempotent.
 	"""
 	controller = frappe.get_cached_doc("Razorpay Settings")
 	secret = controller.get_password("webhook_secret", raise_exception=False)
@@ -778,12 +775,22 @@ def process_webhook(raw_body: bytes, signature: str) -> str | None:
 	return log.name
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(allow_guest=True, methods=["POST"])
 def razorpay_webhook():
-	name = process_webhook(
-		frappe.request.data,
-		frappe.get_request_header("X-Razorpay-Signature", ""),
-	)
+	"""Accept every webhook and answer 200.
+
+	Razorpay disables an endpoint that keeps failing, so a rejected or malformed
+	request goes to the Error Log rather than back to Razorpay as an error.
+	"""
+	try:
+		name = process_webhook(
+			frappe.request.data,
+			frappe.get_request_header("X-Razorpay-Signature", ""),
+		)
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error("Razorpay webhook rejected")
+		return
 
 	if not name:
 		return
@@ -798,4 +805,13 @@ def razorpay_webhook():
 
 
 def handle_refund_notification(doctype, docname):
-	call_hook_method("handle_refund_notification", doctype=doctype, docname=docname)
+	log = frappe.get_doc(doctype, docname)
+
+	try:
+		call_hook_method("handle_refund_notification", doctype=doctype, docname=docname)
+	except Exception:
+		frappe.db.rollback()
+		frappe.log_error("Razorpay refund notification failed")
+		log.handle_failure({"traceback": frappe.get_traceback()})
+	else:
+		log.db_set("status", "Completed")
