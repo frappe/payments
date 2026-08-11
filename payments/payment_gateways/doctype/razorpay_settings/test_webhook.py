@@ -164,3 +164,50 @@ class TestRazorpayRefundNotification(IntegrationTestCase):
 		status, error = frappe.db.get_value("Integration Request", self.log.name, ["status", "error"])
 		self.assertEqual(status, "Failed")
 		self.assertIn("subscriber blew up", error)
+
+
+class TestRazorpayWebhookQueueing(IntegrationTestCase):
+	def setUp(self):
+		self.secret = "whsec_test"
+		self.body = json.dumps(REFUND_PROCESSED_PAYLOAD).encode()
+		patcher = patch.object(RazorpaySettings, "get_password", return_value=self.secret)
+		patcher.start()
+		self.addCleanup(patcher.stop)
+
+	def post(self, event_id: str, enqueue_fails: bool = False):
+		request = MagicMock()
+		request.data = self.body
+		headers = {
+			"X-Razorpay-Signature": sign(self.body, self.secret),
+			"X-Razorpay-Event-Id": event_id,
+		}
+
+		with (
+			patch.object(frappe, "request", request),
+			patch.object(
+				frappe,
+				"get_request_header",
+				side_effect=lambda key, default=None: headers.get(key, default),
+			),
+			patch.object(frappe.db, "commit"),
+			patch.object(
+				frappe,
+				"enqueue",
+				side_effect=Exception("redis is down") if enqueue_fails else None,
+			),
+		):
+			return razorpay_webhook()
+
+	def test_a_queue_that_is_down_reaches_razorpay_so_it_retries(self):
+		# Answering 200 would drop the refund: Razorpay only resends what it did
+		# not get a 2xx for.
+		with self.assertRaises(Exception):
+			self.post("evt_1", enqueue_fails=True)
+
+	def test_a_redelivered_event_reuses_its_integration_request(self):
+		with self.assertRaises(Exception):
+			self.post("evt_1", enqueue_fails=True)
+
+		self.post("evt_1")
+
+		self.assertEqual(frappe.db.count("Integration Request", {"request_id": "evt_1"}), 1)

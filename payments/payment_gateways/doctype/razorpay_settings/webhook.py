@@ -8,11 +8,12 @@ from frappe.utils import call_hook_method
 SUPPORTED_WEBHOOK_EVENTS = {"refund.processed", "refund.failed"}
 
 
-def process_webhook(raw_body: bytes, signature: str) -> str | None:
+def process_webhook(raw_body: bytes, signature: str, event_id: str = "") -> str | None:
 	"""Verify and log a webhook, returning the Integration Request name.
 
-	Returns None for unhandled events. The same event arrives more than once, so
-	subscribers of `handle_refund_notification` must make their writes idempotent.
+	Returns None for unhandled events. Razorpay resends an event until it gets a
+	2xx, so a delivery it has already logged reuses that row rather than piling
+	up duplicates. Subscribers must still make their own writes idempotent.
 	"""
 	controller = frappe.get_cached_doc("Razorpay Settings")
 	secret = controller.get_password("webhook_secret", raise_exception=False)
@@ -27,11 +28,18 @@ def process_webhook(raw_body: bytes, signature: str) -> str | None:
 	if frappe.parse_json(body).get("event") not in SUPPORTED_WEBHOOK_EVENTS:
 		return None
 
+	logged = event_id and frappe.db.exists(
+		"Integration Request", {"request_id": event_id, "request_description": "Refund Notification"}
+	)
+	if logged:
+		return logged
+
 	log = frappe.get_doc(
 		{
 			"doctype": "Integration Request",
 			"integration_request_service": "Razorpay",
 			"request_description": "Refund Notification",
+			"request_id": event_id,
 			"data": body,
 			"is_remote_request": 1,
 			"status": "Queued",
@@ -43,23 +51,26 @@ def process_webhook(raw_body: bytes, signature: str) -> str | None:
 
 @frappe.whitelist(allow_guest=True, methods=["POST"])
 def razorpay_webhook():
-	"""Accept every webhook and answer 200.
+	"""Answer 200 to anything Razorpay should not resend.
 
-	Razorpay disables an endpoint that keeps failing, so a rejected or malformed
-	request goes to the Error Log rather than back to Razorpay as an error.
+	A rejected or malformed request goes to the Error Log, because retrying it
+	changes nothing and Razorpay disables an endpoint that keeps failing. A queue
+	that is down is the opposite case: the error is left to reach Razorpay so the
+	delivery comes back, and the event id keeps the retry from logging twice.
 	"""
-	event_id = frappe.get_request_header("X-Razorpay-Event-Id", "unknown")
+	event_id = frappe.get_request_header("X-Razorpay-Event-Id", "")
 
 	try:
 		name = process_webhook(
 			frappe.request.data,
 			frappe.get_request_header("X-Razorpay-Signature", ""),
+			event_id,
 		)
 	except Exception as exception:
 		frappe.db.rollback()
 		frappe.log_error(
 			f"Razorpay webhook rejected: {exception}",
-			f"Razorpay event id: {event_id}\n\n{frappe.get_traceback(with_context=True)}",
+			f"Razorpay event id: {event_id or 'unknown'}\n\n{frappe.get_traceback(with_context=True)}",
 		)
 		return
 
