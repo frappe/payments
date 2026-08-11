@@ -49,7 +49,9 @@ def process_webhook(raw_body: bytes, signature: str, event_id: str = "") -> str 
 	return log.name
 
 
-@frappe.whitelist(allow_guest=True, methods=["POST"])
+# Razorpay is not a logged-in user, so this cannot be anything but a guest
+# endpoint. It authenticates on the HMAC signature before it writes anything.
+@frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep
 def razorpay_webhook():
 	"""Answer 200 to anything Razorpay should not resend.
 
@@ -77,7 +79,8 @@ def razorpay_webhook():
 	if not name:
 		return
 
-	frappe.db.commit()
+	# The worker reads this row by name, so it has to be there before the job is.
+	frappe.db.commit()  # nosemgrep: frappe-semgrep-rules.rules.frappe-manual-commit
 	frappe.enqueue(
 		method="payments.payment_gateways.doctype.razorpay_settings.webhook.handle_refund_notification",
 		queue="short",
