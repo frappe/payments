@@ -84,13 +84,18 @@ class TestRazorpayWebhookEndpoint(IntegrationTestCase):
 		patcher.start()
 		self.addCleanup(patcher.stop)
 
-	def post(self, signature):
+	def post(self, signature, event_id="evt_test"):
 		request = MagicMock()
 		request.data = self.body
+		headers = {"X-Razorpay-Signature": signature, "X-Razorpay-Event-Id": event_id}
 
 		with (
 			patch.object(frappe, "request", request),
-			patch.object(frappe, "get_request_header", return_value=signature),
+			patch.object(
+				frappe,
+				"get_request_header",
+				side_effect=lambda key, default=None: headers.get(key, default),
+			),
 			patch.object(frappe, "enqueue") as enqueue,
 		):
 			return razorpay_webhook(), enqueue
@@ -105,6 +110,13 @@ class TestRazorpayWebhookEndpoint(IntegrationTestCase):
 		enqueue.assert_not_called()
 		self.assertEqual(frappe.db.count("Integration Request"), integration_requests)
 		self.assertEqual(frappe.db.count("Error Log"), error_logs + 1)
+
+	def test_a_rejection_names_its_cause_and_the_delivery_it_came_from(self):
+		self.post("deadbeef", event_id="evt_9f3c")
+
+		log = frappe.get_last_doc("Error Log")
+		self.assertIn("Signature Verification Failed", log.method)
+		self.assertIn("evt_9f3c", log.error)
 
 	def test_a_valid_webhook_is_queued_for_processing(self):
 		_, enqueue = self.post(sign(self.body, self.secret))

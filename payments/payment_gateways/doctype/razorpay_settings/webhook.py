@@ -48,14 +48,19 @@ def razorpay_webhook():
 	Razorpay disables an endpoint that keeps failing, so a rejected or malformed
 	request goes to the Error Log rather than back to Razorpay as an error.
 	"""
+	event_id = frappe.get_request_header("X-Razorpay-Event-Id", "unknown")
+
 	try:
 		name = process_webhook(
 			frappe.request.data,
 			frappe.get_request_header("X-Razorpay-Signature", ""),
 		)
-	except Exception:
+	except Exception as exception:
 		frappe.db.rollback()
-		frappe.log_error("Razorpay webhook rejected")
+		frappe.log_error(
+			f"Razorpay webhook rejected: {exception}",
+			f"Razorpay event id: {event_id}\n\n{frappe.get_traceback(with_context=True)}",
+		)
 		return
 
 	if not name:
