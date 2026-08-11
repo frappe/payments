@@ -62,6 +62,7 @@ For razorpay payment status is Authorized
 import hashlib
 import hmac
 import json
+from contextlib import contextmanager
 from urllib.parse import urlencode
 
 import frappe
@@ -73,9 +74,30 @@ from frappe.integrations.utils import (
 	make_post_request,
 )
 from frappe.model.document import Document
-from frappe.utils import call_hook_method, cint, get_timestamp, get_url
+from frappe.utils import call_hook_method, cint, flt, get_timestamp, get_url
 
 from payments.utils import create_payment_gateway
+
+
+def to_paise(amount: float) -> int:
+	"""Razorpay takes amounts as integer paise."""
+	return cint(round(flt(amount) * 100))
+
+
+def from_paise(amount: int) -> float:
+	return flt(amount) / 100
+
+
+@contextmanager
+def razorpay_api_call(action: str):
+	"""Translate SDK exceptions into messages a Desk user can act on."""
+	try:
+		yield
+	except razorpay.errors.BadRequestError as exception:
+		frappe.throw(_("Razorpay rejected the {0} request: {1}").format(action, str(exception)))
+	except (razorpay.errors.GatewayError, razorpay.errors.ServerError):
+		frappe.log_error(f"Razorpay {action} failed", frappe.get_traceback())
+		frappe.throw(_("Razorpay could not process the {0} request. Check the Error Log.").format(action))
 
 
 class RazorpaySettings(Document):
@@ -212,10 +234,13 @@ class RazorpaySettings(Document):
 		"ZMW",
 	)
 
+	def get_client(self) -> razorpay.Client:
+		settings = self.get_settings({})
+		return razorpay.Client(auth=(settings.api_key, settings.api_secret))
+
 	def init_client(self):
 		if self.api_key:
-			secret = self.get_password(fieldname="api_secret", raise_exception=False)
-			self.client = razorpay.Client(auth=(self.api_key, secret))
+			self.client = self.get_client()
 
 	def validate(self):
 		create_payment_gateway("Razorpay")
@@ -473,6 +498,38 @@ class RazorpaySettings(Document):
 			)
 
 		return settings
+
+	def fetch_payment(self, payment_id: str) -> dict:
+		with razorpay_api_call("payment fetch"):
+			return self.get_client().payment.fetch(payment_id)
+
+	def fetch_refund(self, refund_id: str) -> dict:
+		with razorpay_api_call("refund fetch"):
+			return self.get_client().refund.fetch(refund_id)
+
+	def refund_payment(self, payment_id: str, amount: float | None = None) -> dict:
+		"""`amount` is in major units; None refunds whatever is still refundable.
+
+		The returned refund stays `pending` until Razorpay settles it, so callers
+		reconcile via `fetch_refund` or the `refund.processed` webhook.
+		"""
+		payment = self.fetch_payment(payment_id)
+
+		if payment.get("status") != "captured":
+			frappe.throw(_("Only captured payments can be refunded"))
+
+		refundable = from_paise(cint(payment.get("amount")) - cint(payment.get("amount_refunded")))
+		amount = refundable if amount is None else flt(amount)
+
+		if amount <= 0 or amount > refundable:
+			frappe.throw(
+				_("Refund amount must be greater than 0 and at most {0} {1}").format(
+					refundable, payment.get("currency") or ""
+				)
+			)
+
+		with razorpay_api_call("refund"):
+			return self.get_client().payment.refund(payment_id, to_paise(amount))
 
 	def cancel_subscription(self, subscription_id):
 		settings = self.get_settings({})
