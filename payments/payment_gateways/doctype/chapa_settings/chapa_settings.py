@@ -23,8 +23,8 @@ class ChapaSettings(Document):
     def on_update(self):
         create_payment_gateway(
             "Chapa",
-            settings="Chapa Settings",
-            controller="Chapa",
+            settings=self.name,
+            controller="ChapaSettings",
         )
 
         self.validate_credentials()
@@ -62,12 +62,13 @@ class ChapaSettings(Document):
     # CALLED BY LMS / PAYMENT FLOW
     # -----------------------------
     def get_payment_url(self, **kwargs):
-        self.validate_transaction_currency(kwargs.get("currency"))
-
         self.data = frappe._dict(kwargs)
 
+        self.validate_transaction_currency(
+            self.data.get("currency")
+        )
+
         return self.initialize_transaction()
-    
     def create_request(self, data):
         return self.get_payment_url(**data)
     # -----------------------------
@@ -161,55 +162,123 @@ class ChapaSettings(Document):
     # -----------------------------
 @frappe.whitelist(allow_guest=True)
 def verify_payment():
-    tx_ref = frappe.form_dict.get("tx_ref")
+    frappe.logger().info(
+        f"CHAPA VERIFY CALLED: {frappe.form_dict}"
+    )
+
+    tx_ref = (
+        frappe.form_dict.get("tx_ref")
+        or frappe.request.args.get("tx_ref")
+    )
 
     if not tx_ref:
         frappe.throw(_("Missing tx_ref"))
 
-    settings = frappe.get_doc("Chapa Settings", "Chapa")
+    # -----------------------------------
+    # GET CHAPA SETTINGS
+    # -----------------------------------
+
+    settings_name = frappe.db.get_value(
+        "Chapa Settings",
+        {"gateway_name": "Chapa"},
+        "name"
+    )
+
+    if not settings_name:
+        frappe.throw(_("Chapa Settings configuration was not found"))
+
+    settings = frappe.get_doc(
+        "Chapa Settings",
+        settings_name
+    )
+
+    # -----------------------------------
+    # VERIFY WITH CHAPA
+    # -----------------------------------
 
     headers = {
-        "Authorization": f"Bearer {settings.get_password('secret_key')}"
+        "Authorization": (
+            f"Bearer {settings.get_password('secret_key')}"
+        )
     }
 
-    r = requests.get(
+    response = requests.get(
         f"https://api.chapa.co/v1/transaction/verify/{tx_ref}",
         headers=headers,
         timeout=15,
     )
 
-    r.raise_for_status()
-    result = r.json()
+    response.raise_for_status()
+
+    result = response.json()
+
+    frappe.logger().info(
+        f"CHAPA VERIFY RESPONSE: {result}"
+    )
 
     if result.get("status") != "success":
-        frappe.throw(_("Payment verification failed"))
+        frappe.throw(
+            _("Payment verification failed")
+        )
 
     payment_data = result.get("data", {})
 
-    # Extract LMS Payment document name
+    # -----------------------------------
+    # MAKE SURE PAYMENT IS ACTUALLY SUCCESSFUL
+    # -----------------------------------
+
+    if payment_data.get("status") != "success":
+        frappe.throw(
+            _("Chapa payment was not successful")
+        )
+
+    # -----------------------------------
+    # FIND LMS PAYMENT
+    # -----------------------------------
+
     payment_name = tx_ref.rsplit("-", 1)[0]
 
-    if frappe.db.exists("LMS Payment", payment_name):
-        payment = frappe.get_doc("LMS Payment", payment_name)
+    if not frappe.db.exists(
+        "LMS Payment",
+        payment_name
+    ):
+        frappe.throw(
+            _("LMS Payment {0} was not found").format(
+                payment_name
+            )
+        )
+
+    payment = frappe.get_doc(
+        "LMS Payment",
+        payment_name
+    )
+
+    # -----------------------------------
+    # UPDATE PAYMENT
+    # -----------------------------------
 
     if not payment.payment_received:
+
         payment.payment_received = 1
-        payment.payment_id = payment_data.get("id")
 
-        # Save payment
-        payment.save(ignore_permissions=True)
+        payment.payment_id = str(
+            payment_data.get("id") or ""
+        )
 
-        # Trigger LMS enrollment
-        if hasattr(payment, "on_payment_authorized"):
-            payment.on_payment_authorized()
-
-        if hasattr(payment, "create_enrollment"):
-            payment.create_enrollment()
+        payment.save(
+            ignore_permissions=True
+        )
 
         frappe.db.commit()
+
+        frappe.logger().info(
+            f"CHAPA PAYMENT MARKED PAID: {payment.name}"
+        )
 
     return {
         "status": "success",
         "tx_ref": tx_ref,
+        "payment": payment.name,
+        "payment_received": payment.payment_received,
         "data": payment_data,
     }
