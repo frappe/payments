@@ -23,8 +23,8 @@ class ChapaSettings(Document):
     def on_update(self):
         create_payment_gateway(
             "Chapa",
-            settings=self.name,
-            controller=self.name,
+            settings="Chapa Settings",
+            controller="ChapaSettings",
         )
 
         self.validate_credentials()
@@ -166,7 +166,7 @@ def verify_payment():
     if not tx_ref:
         frappe.throw(_("Missing tx_ref"))
 
-    settings = frappe.get_single("Chapa Settings")
+    settings = frappe.get_doc("Chapa Settings", "Chapa")
 
     headers = {
         "Authorization": f"Bearer {settings.get_password('secret_key')}"
@@ -190,13 +190,23 @@ def verify_payment():
     payment_name = tx_ref.rsplit("-", 1)[0]
 
     if frappe.db.exists("LMS Payment", payment_name):
-        payment = frappe.get_doc("LMS Payment", payment_name)
+    payment = frappe.get_doc("LMS Payment", payment_name)
 
-        if not payment.payment_received:
-            payment.payment_received = 1
-            payment.payment_id = payment_data.get("id")
-            payment.save(ignore_permissions=True)
-            frappe.db.commit()
+    if not payment.payment_received:
+        payment.payment_received = 1
+        payment.payment_id = payment_data.get("id")
+
+        # Save payment
+        payment.save(ignore_permissions=True)
+
+        # Trigger LMS enrollment
+        if hasattr(payment, "on_payment_authorized"):
+            payment.on_payment_authorized()
+
+        if hasattr(payment, "create_enrollment"):
+            payment.create_enrollment()
+
+        frappe.db.commit()
 
     return {
         "status": "success",
