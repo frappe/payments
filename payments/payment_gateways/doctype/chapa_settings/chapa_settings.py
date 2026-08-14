@@ -24,7 +24,7 @@ class ChapaSettings(Document):
         create_payment_gateway(
             "Chapa",
             settings="Chapa Settings",
-            controller="ChapaSettings",
+            controller="Chapa",
         )
 
         self.validate_credentials()
@@ -190,7 +190,7 @@ def verify_payment():
     payment_name = tx_ref.rsplit("-", 1)[0]
 
     if frappe.db.exists("LMS Payment", payment_name):
-    payment = frappe.get_doc("LMS Payment", payment_name)
+        payment = frappe.get_doc("LMS Payment", payment_name)
 
     if not payment.payment_received:
         payment.payment_received = 1
