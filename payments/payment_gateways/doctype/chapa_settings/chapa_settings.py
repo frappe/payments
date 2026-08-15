@@ -1,18 +1,16 @@
 # Copyright (c) 2026, TechVision and contributors
 # License: MIT
 
-import uuid
 import re
-import requests
-import frappe
+import uuid
 
+import frappe
+import requests
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import get_url
 
 from payments.utils import create_payment_gateway
-
-from lms.lms.utils import complete_enrollment
 
 
 class ChapaSettings(Document):
@@ -74,7 +72,7 @@ class ChapaSettings(Document):
             )
 
     # =========================================================
-    # PAYMENT ENTRY POINT
+    # GET PAYMENT URL
     # =========================================================
 
     def get_payment_url(self, **kwargs):
@@ -119,7 +117,6 @@ class ChapaSettings(Document):
         payment = self._find_lms_payment()
 
         if not payment:
-
             frappe.throw(
                 _(
                     "Could not find the LMS Payment document "
@@ -129,6 +126,14 @@ class ChapaSettings(Document):
 
         # -----------------------------------------------------
         # CREATE UNIQUE CHAPA TX REF
+        #
+        # Example:
+        #
+        # LMS Payment:
+        # hogkevj7kq
+        #
+        # Chapa:
+        # hogkevj7kq-a82f92bc12
         # -----------------------------------------------------
 
         tx_ref = (
@@ -136,21 +141,19 @@ class ChapaSettings(Document):
             f"{uuid.uuid4().hex[:10]}"
         )
 
-        # -----------------------------------------------------
-        # SAVE TX REF TO LMS PAYMENT
-        # -----------------------------------------------------
-
+        # Save tx_ref if LMS Payment has a suitable field
         self._save_transaction_reference(
             payment,
-            tx_ref
+            tx_ref,
         )
 
         # -----------------------------------------------------
-        # EMAIL
+        # CUSTOMER EMAIL
         # -----------------------------------------------------
 
         email = (
             self.data.get("payer_email")
+            or payment.member
             or frappe.session.user
         )
 
@@ -162,11 +165,12 @@ class ChapaSettings(Document):
             email = "mehariwamlake@gmail.com"
 
         # -----------------------------------------------------
-        # NAME
+        # CUSTOMER NAME
         # -----------------------------------------------------
 
         payer_name = (
             self.data.get("payer_name")
+            or payment.billing_name
             or "Customer"
         )
 
@@ -184,7 +188,7 @@ class ChapaSettings(Document):
         title = re.sub(
             r"[^A-Za-z0-9_. -]",
             "",
-            str(title)
+            str(title),
         )
 
         title = title[:16]
@@ -201,7 +205,7 @@ class ChapaSettings(Document):
         description = re.sub(
             r"[^A-Za-z0-9_. -]",
             "",
-            str(description)
+            str(description),
         )
 
         description = description[:49]
@@ -211,7 +215,6 @@ class ChapaSettings(Document):
         # -----------------------------------------------------
 
         payload = {
-
             "amount": str(
                 self.data.get("amount")
             ),
@@ -281,7 +284,6 @@ class ChapaSettings(Document):
             result = response.json()
 
             if result.get("status") != "success":
-
                 frappe.throw(
                     str(result)
                 )
@@ -293,7 +295,6 @@ class ChapaSettings(Document):
             )
 
             if not checkout_url:
-
                 frappe.throw(
                     _("Chapa did not return a checkout URL.")
                 )
@@ -320,89 +321,149 @@ class ChapaSettings(Document):
 
     def _find_lms_payment(self):
 
-        # -----------------------------------------------------
-        # BEST METHOD
-        #
-        # LMS sends:
-        #
-        # "payment": payment.name
-        # -----------------------------------------------------
-
-        payment_name = self.data.get("payment")
-
-        if payment_name:
-
-            if frappe.db.exists(
-                "LMS Payment",
-                payment_name
-            ):
-
-                return frappe.get_doc(
-                    "LMS Payment",
-                    payment_name
-                )
-
-        # -----------------------------------------------------
-        # FALLBACK
-        # -----------------------------------------------------
-
         reference_docname = (
             self.data.get("reference_docname")
         )
 
-        member = (
+        user = (
             self.data.get("payer")
             or self.data.get("user")
             or frappe.session.user
         )
 
-        if not reference_docname:
-            return None
+        frappe.logger().info(
+            "CHAPA FIND LMS PAYMENT: "
+            f"reference_docname={reference_docname}, "
+            f"user={user}"
+        )
 
         # -----------------------------------------------------
-        # SEARCH LMS PAYMENT USING STANDARD LMS FIELDS
+        # METHOD 1
+        # reference_docname itself is LMS Payment
         # -----------------------------------------------------
 
-        filters = {
-            "payment_for_document": reference_docname,
-        }
+        if reference_docname:
+
+            if frappe.db.exists(
+                "LMS Payment",
+                reference_docname,
+            ):
+
+                return frappe.get_doc(
+                    "LMS Payment",
+                    reference_docname,
+                )
+
+        # -----------------------------------------------------
+        # GET LMS PAYMENT META
+        # -----------------------------------------------------
 
         meta = frappe.get_meta(
             "LMS Payment"
         )
 
-        fieldnames = {
+        fields = {
             field.fieldname
             for field in meta.fields
         }
 
-        if "member" in fieldnames and member:
-            filters["member"] = member
+        # -----------------------------------------------------
+        # METHOD 2
+        # Search reference_docname
+        # -----------------------------------------------------
 
-        payment_name = frappe.db.get_value(
-            "LMS Payment",
-            filters,
-            "name",
-            order_by="creation desc"
-        )
+        if (
+            reference_docname
+            and "reference_docname" in fields
+        ):
 
-        if payment_name:
-
-            return frappe.get_doc(
+            payment_name = frappe.db.get_value(
                 "LMS Payment",
-                payment_name
+                {
+                    "reference_docname":
+                        reference_docname
+                },
+                "name",
             )
+
+            if payment_name:
+
+                return frappe.get_doc(
+                    "LMS Payment",
+                    payment_name,
+                )
+
+        # -----------------------------------------------------
+        # METHOD 3
+        # Search course
+        # -----------------------------------------------------
+
+        if (
+            reference_docname
+            and "course" in fields
+        ):
+
+            payment_name = frappe.db.get_value(
+                "LMS Payment",
+                {
+                    "course":
+                        reference_docname
+                },
+                "name",
+            )
+
+            if payment_name:
+
+                return frappe.get_doc(
+                    "LMS Payment",
+                    payment_name,
+                )
+
+        # -----------------------------------------------------
+        # METHOD 4
+        # Search payment by document + member
+        # -----------------------------------------------------
+
+        filters = {}
+
+        if reference_docname:
+
+            if "payment_for_document" in fields:
+
+                filters["payment_for_document"] = (
+                    reference_docname
+                )
+
+            if "member" in fields and user:
+
+                filters["member"] = user
+
+        if filters:
+
+            payment_name = frappe.db.get_value(
+                "LMS Payment",
+                filters,
+                "name",
+                order_by="creation desc",
+            )
+
+            if payment_name:
+
+                return frappe.get_doc(
+                    "LMS Payment",
+                    payment_name,
+                )
 
         return None
 
     # =========================================================
-    # SAVE TX REF
+    # SAVE TRANSACTION REFERENCE
     # =========================================================
 
     def _save_transaction_reference(
         self,
         payment,
-        tx_ref
+        tx_ref,
     ):
 
         meta = frappe.get_meta(
@@ -418,28 +479,43 @@ class ChapaSettings(Document):
             "transaction_reference",
             "tx_ref",
             "transaction_id",
+            "reference",
         ]
 
         for fieldname in possible_fields:
 
-            if fieldname in fields:
+            if fieldname not in fields:
+                continue
 
-                try:
+            try:
 
-                    payment.db_set(
-                        fieldname,
-                        tx_ref,
-                        update_modified=False
-                    )
+                payment.db_set(
+                    fieldname,
+                    tx_ref,
+                    update_modified=False,
+                )
 
-                    return
+                frappe.logger().info(
+                    f"CHAPA TX REF SAVED: "
+                    f"{payment.name} -> {tx_ref}"
+                )
 
-                except Exception:
+                return
 
-                    frappe.log_error(
-                        frappe.get_traceback(),
-                        "Chapa TX Ref Save Failed"
-                    )
+            except Exception:
+
+                frappe.log_error(
+                    frappe.get_traceback(),
+                    "Chapa Transaction Reference Save Failed",
+                )
+
+    # =========================================================
+    # INSTANCE COMPATIBILITY
+    # =========================================================
+
+    def verify_payment(self):
+
+        return verify_payment()
 
 
 # =============================================================
@@ -473,36 +549,38 @@ def verify_payment():
     )
 
     # =========================================================
-    # GET SETTINGS
+    # GET CHAPA SETTINGS
     # =========================================================
 
-    try:
+    settings_name = frappe.db.get_value(
+        "Chapa Settings",
+        {"gateway_name": "Chapa"},
+        "name",
+    )
 
-        settings = frappe.get_single(
-            "Chapa Settings"
-        )
+    if settings_name:
 
-    except Exception:
-
-        settings_name = frappe.db.get_value(
+        settings = frappe.get_doc(
             "Chapa Settings",
-            {"gateway_name": "Chapa"},
-            "name"
+            settings_name,
         )
 
-        if not settings_name:
+    else:
+
+        try:
+
+            settings = frappe.get_single(
+                "Chapa Settings"
+            )
+
+        except Exception:
 
             frappe.throw(
                 _("Chapa Settings configuration was not found.")
             )
 
-        settings = frappe.get_doc(
-            "Chapa Settings",
-            settings_name
-        )
-
     # =========================================================
-    # SECRET KEY
+    # GET SECRET KEY
     # =========================================================
 
     secret_key = settings.get_password(
@@ -522,7 +600,7 @@ def verify_payment():
     }
 
     # =========================================================
-    # VERIFY WITH CHAPA
+    # VERIFY TRANSACTION WITH CHAPA
     # =========================================================
 
     verify_url = (
@@ -556,7 +634,7 @@ def verify_payment():
 
         frappe.log_error(
             frappe.get_traceback(),
-            "Chapa Verification Request Failed"
+            "Chapa Verification Request Failed",
         )
 
         frappe.throw(
@@ -566,14 +644,14 @@ def verify_payment():
         )
 
     # =========================================================
-    # CHAPA RESPONSE
+    # CHECK CHAPA RESPONSE
     # =========================================================
 
     if result.get("status") != "success":
 
         frappe.log_error(
             frappe.as_json(result),
-            "Chapa Verification Failed"
+            "Chapa Payment Verification Failed",
         )
 
         frappe.throw(
@@ -586,17 +664,21 @@ def verify_payment():
     )
 
     # =========================================================
-    # ACTUAL PAYMENT STATUS
+    # CHECK ACTUAL PAYMENT STATUS
     # =========================================================
 
-    if payment_data.get("status") != "success":
+    chapa_status = (
+        payment_data.get("status")
+    )
+
+    if chapa_status != "success":
 
         frappe.throw(
             _(
                 "Payment was not successful. "
                 "Chapa status: {0}"
             ).format(
-                payment_data.get("status")
+                chapa_status
             )
         )
 
@@ -608,27 +690,49 @@ def verify_payment():
         tx_ref
     )
 
+    # =========================================================
+    # FALLBACK TO PAYMENT NAME
+    #
+    # Example:
+    #
+    # hogkevj7kq-a82f92bc12
+    #
+    # Payment:
+    # hogkevj7kq
+    # =========================================================
+
     if not payment:
 
-        # -----------------------------------------------------
-        # FALLBACK:
-        #
-        # learn-html-d8e41537ea
-        #
-        # Previously we were incorrectly assuming that
-        # "learn-html" was the LMS Payment name.
-        # It isn't.
-        #
-        # Therefore search using transaction reference first.
-        # -----------------------------------------------------
+        possible_payment_name = (
+            tx_ref.rsplit("-", 1)[0]
+        )
+
+        if frappe.db.exists(
+            "LMS Payment",
+            possible_payment_name,
+        ):
+
+            payment = frappe.get_doc(
+                "LMS Payment",
+                possible_payment_name,
+            )
+
+    # =========================================================
+    # PAYMENT NOT FOUND
+    # =========================================================
+
+    if not payment:
 
         frappe.log_error(
             frappe.as_json({
                 "tx_ref": tx_ref,
                 "chapa_response": payment_data,
             }),
-            "Chapa Payment - LMS Payment Not Found"
+            "Chapa Payment - LMS Payment Not Found",
         )
+
+        # Payment is verified by Chapa.
+        # Do not report a failed payment to the gateway.
 
         return {
             "status": "success",
@@ -642,132 +746,85 @@ def verify_payment():
         }
 
     # =========================================================
+    # PAYMENT ALREADY PROCESSED
+    # =========================================================
+
+    if payment.payment_received:
+
+        # Even if payment was already marked paid,
+        # make sure enrollment exists.
+
+        _complete_lms_enrollment(
+            payment
+        )
+
+        return {
+            "status": "success",
+            "verified": True,
+            "payment_found": True,
+            "already_processed": True,
+            "payment": payment.name,
+            "tx_ref": tx_ref,
+        }
+
+    # =========================================================
+    # UPDATE LMS PAYMENT
+    # =========================================================
+
+    payment.payment_received = 1
+
+    payment.payment_id = str(
+        payment_data.get("reference")
+        or payment_data.get("id")
+        or tx_ref
+    )
+
+    # ---------------------------------------------------------
+    # Save tx_ref if field exists
+    # ---------------------------------------------------------
+
+    meta = frappe.get_meta(
+        "LMS Payment"
+    )
+
+    fields = {
+        field.fieldname
+        for field in meta.fields
+    }
+
+    if "transaction_reference" in fields:
+
+        payment.transaction_reference = tx_ref
+
+    elif "tx_ref" in fields:
+
+        payment.tx_ref = tx_ref
+
+    # =========================================================
     # SAVE PAYMENT
     # =========================================================
 
-    if not payment.payment_received:
+    payment.save(
+        ignore_permissions=True
+    )
 
-        payment.payment_received = 1
+    frappe.db.commit()
 
-        payment.payment_id = str(
-            payment_data.get("reference")
-            or payment_data.get("id")
-            or tx_ref
-        )
-
-        meta = frappe.get_meta(
-            "LMS Payment"
-        )
-
-        fields = {
-            field.fieldname
-            for field in meta.fields
-        }
-
-        if "transaction_reference" in fields:
-
-            payment.transaction_reference = tx_ref
-
-        elif "tx_ref" in fields:
-
-            payment.tx_ref = tx_ref
-
-        payment.save(
-            ignore_permissions=True
-        )
-
-        frappe.db.commit()
+    frappe.logger().info(
+        f"CHAPA PAYMENT MARKED PAID: "
+        f"{payment.name}"
+    )
 
     # =========================================================
-    # GET PAYMENT TARGET
+    # COMPLETE LMS ENROLLMENT
     # =========================================================
 
-    doctype = payment.payment_for_document_type
-    docname = payment.payment_for_document
-
-    if not doctype or not docname:
-
-        frappe.log_error(
-            frappe.as_json({
-                "payment": payment.name,
-                "doctype": doctype,
-                "docname": docname,
-            }),
-            "Chapa Enrollment - Missing Payment Target"
-        )
-
-        return {
-            "status": "success",
-            "verified": True,
-            "payment_found": True,
-            "payment": payment.name,
-            "enrollment": False,
-            "message": (
-                "Payment verified, but enrollment target "
-                "is missing."
-            ),
-        }
+    _complete_lms_enrollment(
+        payment
+    )
 
     # =========================================================
-    # ENROLLMENT
-    # =========================================================
-
-    enrollment_result = None
-
-    try:
-
-        frappe.logger().info(
-            "CHAPA LMS ENROLLMENT START: "
-            f"payment={payment.name}, "
-            f"doctype={doctype}, "
-            f"docname={docname}"
-        )
-
-        enrollment_result = complete_enrollment(
-            payment.name,
-            doctype,
-            docname
-        )
-
-        frappe.db.commit()
-
-        frappe.logger().info(
-            "CHAPA LMS ENROLLMENT SUCCESS: "
-            f"payment={payment.name}, "
-            f"result={enrollment_result}"
-        )
-
-    except Exception:
-
-        frappe.db.rollback()
-
-        frappe.log_error(
-            frappe.get_traceback(),
-            "Chapa LMS Enrollment Failed"
-        )
-
-        # Payment itself remains verified.
-        # The enrollment error is logged so it can be
-        # retried/debugged without charging the customer again.
-
-        return {
-            "status": "success",
-            "verified": True,
-            "payment_found": True,
-            "payment": payment.name,
-            "payment_received": 1,
-            "enrollment": False,
-            "doctype": doctype,
-            "docname": docname,
-            "message": (
-                "Payment verified successfully, "
-                "but enrollment failed. "
-                "Check Error Log."
-            ),
-        }
-
-    # =========================================================
-    # SUCCESS
+    # FINAL RESPONSE
     # =========================================================
 
     return {
@@ -776,15 +833,96 @@ def verify_payment():
         "payment_found": True,
         "payment": payment.name,
         "payment_received": payment.payment_received,
-        "enrollment": True,
-        "doctype": doctype,
-        "docname": docname,
         "tx_ref": tx_ref,
         "chapa_reference": payment_data.get(
             "reference"
         ),
         "data": payment_data,
     }
+
+
+# =============================================================
+# COMPLETE LMS ENROLLMENT
+# =============================================================
+
+def _complete_lms_enrollment(payment):
+
+    try:
+
+        from lms.lms.utils import complete_enrollment
+
+        # -----------------------------------------------------
+        # IMPORTANT
+        #
+        # Chapa callback runs as Guest.
+        #
+        # Standard LMS enroll_in_course() uses:
+        #
+        # frappe.session.user
+        #
+        # Therefore temporarily switch to the member
+        # stored in LMS Payment.
+        # -----------------------------------------------------
+
+        member = payment.member
+
+        if not member:
+
+            frappe.log_error(
+                f"LMS Payment {payment.name} has no member.",
+                "Chapa LMS Enrollment Failed",
+            )
+
+            return False
+
+        original_user = frappe.session.user
+
+        try:
+
+            frappe.set_user(
+                member
+            )
+
+            frappe.logger().info(
+                f"CHAPA ENROLLMENT START: "
+                f"payment={payment.name}, "
+                f"member={member}, "
+                f"type={payment.payment_for_document_type}, "
+                f"document={payment.payment_for_document}"
+            )
+
+            complete_enrollment(
+                payment.name,
+                payment.payment_for_document_type,
+                payment.payment_for_document,
+            )
+
+            frappe.db.commit()
+
+            frappe.logger().info(
+                f"CHAPA ENROLLMENT SUCCESS: "
+                f"payment={payment.name}, "
+                f"member={member}, "
+                f"document={payment.payment_for_document}"
+            )
+
+            return True
+
+        finally:
+
+            # Restore callback user
+            frappe.set_user(
+                original_user
+            )
+
+    except Exception:
+
+        frappe.log_error(
+            frappe.get_traceback(),
+            "Chapa LMS Enrollment Failed",
+        )
+
+        return False
 
 
 # =============================================================
@@ -803,13 +941,14 @@ def _find_payment_from_tx_ref(tx_ref):
     }
 
     # ---------------------------------------------------------
-    # MOST RELIABLE: transaction_reference
+    # Search transaction fields
     # ---------------------------------------------------------
 
     for fieldname in [
         "transaction_reference",
         "tx_ref",
         "transaction_id",
+        "reference",
     ]:
 
         if fieldname not in fields:
@@ -820,32 +959,14 @@ def _find_payment_from_tx_ref(tx_ref):
             {
                 fieldname: tx_ref
             },
-            "name"
+            "name",
         )
 
         if payment_name:
 
             return frappe.get_doc(
                 "LMS Payment",
-                payment_name
+                payment_name,
             )
-
-    # ---------------------------------------------------------
-    # FALLBACK: payment name is first part of tx_ref
-    # ---------------------------------------------------------
-
-    possible_payment_name = (
-        tx_ref.rsplit("-", 1)[0]
-    )
-
-    if frappe.db.exists(
-        "LMS Payment",
-        possible_payment_name
-    ):
-
-        return frappe.get_doc(
-            "LMS Payment",
-            possible_payment_name
-        )
 
     return None
