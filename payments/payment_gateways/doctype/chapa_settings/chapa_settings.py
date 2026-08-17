@@ -3,6 +3,8 @@
 
 import uuid
 import re
+from decimal import Decimal, InvalidOperation
+
 import requests
 import frappe
 from frappe import _
@@ -13,19 +15,17 @@ from payments.utils import create_payment_gateway
 
 
 class ChapaSettings(Document):
-    
     supported_currencies = ("ETB",)
-    
 
     # -----------------------------
     # REGISTER GATEWAY
     # -----------------------------
     def on_update(self):
-        create_payment_gateway(
-            "Chapa",
-            settings=self.name,
-            controller=self.name,
-        )
+        # Chapa Settings is a Single DocType, so it cannot be the target of the
+        # Payment Gateway's Dynamic Link field. With no controller stored on the
+        # gateway, get_payment_gateway_controller() loads "Chapa Settings"
+        # directly, as it does for the other single-settings gateways.
+        create_payment_gateway("Chapa")
 
         self.validate_credentials()
 
@@ -53,11 +53,10 @@ class ChapaSettings(Document):
         except requests.RequestException:
             frappe.throw(_("Unable to connect to Chapa API"))
 
-    supported_currencies = ("ETB",)
-
     def validate_transaction_currency(self, currency):
         if currency and currency not in self.supported_currencies:
             frappe.throw(_("Chapa only supports ETB transactions"))
+
     # -----------------------------
     # CALLED BY LMS / PAYMENT FLOW
     # -----------------------------
@@ -67,9 +66,10 @@ class ChapaSettings(Document):
         self.data = frappe._dict(kwargs)
 
         return self.initialize_transaction()
-    
+
     def create_request(self, data):
         return self.get_payment_url(**data)
+
     # -----------------------------
     # INIT PAYMENT (CHAPA API)
     # -----------------------------
@@ -81,9 +81,7 @@ class ChapaSettings(Document):
             "Content-Type": "application/json",
         }
 
-        tx_ref = f"{self.data.reference_docname}-{uuid.uuid4().hex[:10]}"
-
-                
+        tx_ref = f"{self.data.payment}-{uuid.uuid4().hex[:10]}"
 
         email = (
             self.data.get("payer_email")
@@ -104,26 +102,19 @@ class ChapaSettings(Document):
         payload = {
             "amount": str(self.data.amount),
             "currency": "ETB",
-
             "email": email,
-
             "first_name": (
                 self.data.get("payer_name")
                 or "Customer"
             )[:30],
-
             "last_name": "",
-
             "phone_number": self.data.get("phone_number") or "",
-
             "tx_ref": tx_ref,
-
             "callback_url": get_url(
-                "/api/method/payments.payment_gateways.doctype.chapa_settings.chapa_settings.verify_payment"
+                "/api/method/payments.payment_gateways.doctype."
+                "chapa_settings.chapa_settings.verify_payment"
             ),
-
             "return_url": get_url(self.data.redirect_to or "/"),
-
             "customization": {
                 "title": title,
                 "description": description,
@@ -157,11 +148,16 @@ class ChapaSettings(Document):
             frappe.throw(frappe.get_traceback())
 
     # -----------------------------
-    # VERIFY PAYMENT (WEBHOOK)
+    # VERIFY PAYMENT + AUTO ENROLLMENT
     # -----------------------------
+
+
 @frappe.whitelist(allow_guest=True)
 def verify_payment():
-    tx_ref = frappe.form_dict.get("tx_ref")
+    tx_ref = (
+        frappe.form_dict.get("trx_ref")
+        or frappe.form_dict.get("tx_ref")
+    )
 
     if not tx_ref:
         frappe.throw(_("Missing tx_ref"))
@@ -180,23 +176,64 @@ def verify_payment():
 
     r.raise_for_status()
     result = r.json()
+    payment_data = result.get("data") or {}
 
-    if result.get("status") != "success":
+    if (
+        result.get("status") != "success"
+        or payment_data.get("status") != "success"
+    ):
         frappe.throw(_("Payment verification failed"))
 
-    payment_data = result.get("data", {})
+    if payment_data.get("tx_ref") != tx_ref:
+        frappe.throw(_("Payment reference mismatch"))
 
-    # Extract LMS Payment document name
+    # Extract LMS Payment document name from:
+    # LMS-PAY-00001-<random Chapa suffix>
     payment_name = tx_ref.rsplit("-", 1)[0]
 
-    if frappe.db.exists("LMS Payment", payment_name):
-        payment = frappe.get_doc("LMS Payment", payment_name)
+    if not frappe.db.exists("LMS Payment", payment_name):
+        frappe.throw(_("LMS Payment not found"))
 
-        if not payment.payment_received:
-            payment.payment_received = 1
-            payment.payment_id = payment_data.get("id")
-            payment.save(ignore_permissions=True)
-            frappe.db.commit()
+    payment = frappe.get_doc("LMS Payment", payment_name)
+
+    try:
+        paid_amount = Decimal(str(payment_data.get("amount")))
+        expected_amount = Decimal(str(payment.amount_with_gst or payment.amount))
+    except (InvalidOperation, TypeError, ValueError):
+        frappe.throw(_("Invalid payment amount returned by Chapa"))
+
+    if paid_amount != expected_amount or payment_data.get("currency") != payment.currency:
+        frappe.throw(_("Payment amount or currency mismatch"))
+
+    if not payment.member:
+        frappe.throw(_("Payment member not found"))
+
+    if not payment.payment_received:
+        from lms.lms.utils import complete_enrollment
+
+        payment.payment_received = 1
+        payment.payment_id = payment_data.get("reference")
+        payment.save(ignore_permissions=True)
+
+        # Chapa calls this endpoint as Guest. LMS enrollment uses
+        # frappe.session.user, so switch temporarily to the actual payer.
+        original_user = frappe.session.user
+
+        try:
+            frappe.set_user(payment.member)
+
+            # Automatically creates LMS Enrollment, LMS Batch Enrollment,
+            # or certificate-purchase state based on the LMS Payment record.
+            complete_enrollment(
+                payment.name,
+                payment.payment_for_document_type,
+                payment.payment_for_document,
+            )
+
+        finally:
+            frappe.set_user(original_user)
+
+        frappe.db.commit()
 
     return {
         "status": "success",
