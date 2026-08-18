@@ -51,6 +51,27 @@ class TestRazorpayFetch(IntegrationTestCase):
 		client.refund.fetch.assert_called_once_with("rfnd_123")
 		self.assertEqual(refund["status"], "processed")
 
+	def test_fetch_refunds_returns_the_refunds_on_a_payment(self):
+		client = MagicMock()
+		client.payment.fetch_multiple_refund.return_value = {
+			"entity": "collection",
+			"count": 1,
+			"items": [{"id": "rfnd_123", "status": "processed", "amount": 5000}],
+		}
+
+		with patch.object(RazorpaySettings, "get_client", return_value=client):
+			refunds = self.settings.fetch_refunds("pay_123")
+
+		client.payment.fetch_multiple_refund.assert_called_once_with("pay_123")
+		self.assertEqual([refund["id"] for refund in refunds], ["rfnd_123"])
+
+	def test_fetch_refunds_is_empty_when_the_payment_has_none(self):
+		client = MagicMock()
+		client.payment.fetch_multiple_refund.return_value = {"entity": "collection", "count": 0, "items": []}
+
+		with patch.object(RazorpaySettings, "get_client", return_value=client):
+			self.assertEqual(self.settings.fetch_refunds("pay_123"), [])
+
 
 CAPTURED_PAYMENT = {
 	"id": "pay_123",

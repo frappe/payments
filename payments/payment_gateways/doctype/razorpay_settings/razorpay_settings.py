@@ -507,6 +507,11 @@ class RazorpaySettings(Document):
 		with razorpay_api_call("refund fetch"):
 			return self.get_client().refund.fetch(refund_id)
 
+	def fetch_refunds(self, payment_id: str) -> list[dict]:
+		"""Every refund Razorpay holds against a payment. Amounts are in paise."""
+		with razorpay_api_call("refund list"):
+			return self.get_client().payment.fetch_multiple_refund(payment_id).get("items", [])
+
 	def refund_payment(self, payment_id: str, amount: float | None = None) -> dict:
 		"""`amount` is in major units; None refunds whatever is still refundable.
 
