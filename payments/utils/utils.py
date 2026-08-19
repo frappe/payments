@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from importlib import import_module
 
 import click
 import frappe
@@ -51,12 +52,34 @@ def create_payment_gateway(gateway, settings=None, controller=None):
 		payment_gateway = frappe.get_doc(
 			{
 				"doctype": "Payment Gateway",
-				"gateway": gateway,
+				"gateway_name": gateway,
 				"gateway_settings": settings,
 				"gateway_controller": controller,
 			}
 		)
 		payment_gateway.insert(ignore_permissions=True)
+
+
+def after_install():
+	make_custom_fields()
+	make_payments_erpnext_custom_fields()
+
+
+def before_uninstall():
+	delete_custom_fields()
+	delete_payments_erpnext_custom_fields()
+
+
+def reconcile_erpnext_custom_fields():
+	"""Sync ERPNext-integration custom fields with ERPNext's presence on every migrate.
+
+	Creates them when ERPNext is installed, drops the orphaned ones (Link/Table targets
+	gone) when it is not — so ERPNext never has to reach into Payments on uninstall.
+	"""
+	if "erpnext" in frappe.get_installed_apps():
+		make_payments_erpnext_custom_fields()
+	else:
+		delete_payments_erpnext_custom_fields()
 
 
 def make_custom_fields():
@@ -143,29 +166,142 @@ def make_custom_fields():
 
 		frappe.clear_cache(doctype="Web Form")
 
-	if "erpnext" in frappe.get_installed_apps():
-		custom_fields = {
-			"GoCardless Mandate": [
-				{
-					"fieldname": "customer",
-					"fieldtype": "Link",
-					"in_list_view": 1,
-					"label": "Customer",
-					"options": "Customer",
-					"reqd": 1,
-					"insert_after": "disabled",
-				}
-			]
-		}
 
-		create_custom_fields(custom_fields)
+def make_payments_erpnext_custom_fields():
+	apps = frappe.get_installed_apps()
+	if "erpnext" not in apps or "payments" not in apps:
+		return
+
+	for doctype in get_payments_erpnext_custom_fields():
+		click.secho(f"* Installing Payments Custom Fields in {doctype}")
+
+	create_custom_fields(get_payments_erpnext_custom_fields())
+
+
+def get_payments_erpnext_custom_fields():
+	return {
+		"GoCardless Mandate": [
+			{
+				"fieldname": "customer",
+				"fieldtype": "Link",
+				"in_list_view": 1,
+				"label": "Customer",
+				"options": "Customer",
+				"reqd": 1,
+				"insert_after": "disabled",
+			}
+		],
+		"Payment Gateway Account": [
+			{
+				"fieldname": "company",
+				"fieldtype": "Link",
+				"in_list_view": 1,
+				"label": "Company",
+				"options": "Company",
+				"reqd": 1,
+				"insert_after": "section_break_1",
+			},
+			{
+				"fieldname": "payment_account",
+				"fieldtype": "Link",
+				"in_list_view": 1,
+				"label": "Payment Account",
+				"options": "Account",
+				"reqd": 1,
+				"insert_after": "company",
+			},
+		],
+		"Payment Gateway": [
+			{
+				"fieldname": "pga_section",
+				"fieldtype": "Section Break",
+				"insert_after": "gateway_controller",
+			},
+			{
+				"fieldname": "payment_gateway_account",
+				"fieldtype": "Table",
+				"label": "Payment Gateway Account",
+				"options": "Payment Gateway Account",
+				"insert_after": "pga_section",
+			},
+		],
+		"Subscription Plan": [
+			{
+				"fieldname": "payment_gateway",
+				"fieldtype": "Link",
+				"label": "Payment Gateway",
+				"options": "Payment Gateway",
+				"insert_after": "column_break_16",
+			},
+			{
+				"fieldname": "payment_account",
+				"fieldtype": "Link",
+				"label": "Payment Account",
+				"options": "Account",
+				"insert_after": "payment_gateway",
+			},
+		],
+		"Payment Request": [
+			{
+				"fieldname": "payment_details_section",
+				"fieldtype": "Section Break",
+				"label": "Payment Gateway Details",
+				"depends_on": "eval: !doc.bank_account",
+				"insert_after": "accounting_dimensions_section",
+			},
+			{
+				"fieldname": "payment_gateway",
+				"fieldtype": "Link",
+				"label": "Payment Gateway",
+				"options": "Payment Gateway",
+				"insert_after": "payment_details_section",
+			},
+			{
+				"fieldname": "payment_account",
+				"fieldtype": "Link",
+				"label": "Payment Account",
+				"options": "Account",
+				"mandatory_depends_on": "eval: doc.payment_gateway",
+				"insert_after": "payment_gateway",
+			},
+			{
+				"fieldname": "payment_channel",
+				"fieldtype": "Data",
+				"label": "Payment Channel",
+				"read_only": 1,
+				"insert_after": "payment_account",
+			},
+			{
+				"fieldname": "column_break_pnyv",
+				"fieldtype": "Column Break",
+				"insert_after": "payment_channel",
+			},
+			{
+				"fieldname": "payment_url",
+				"fieldtype": "Data",
+				"label": "Payment URL",
+				"length": 500,
+				"options": "URL",
+				"read_only": 1,
+				"insert_after": "column_break_pnyv",
+			},
+			{
+				"fieldname": "phone_number",
+				"fieldtype": "Data",
+				"label": "Phone Number",
+				"options": "Phone",
+				"mandatory_depends_on": "eval: doc.payment_channel == 'Phone'",
+				"insert_after": "payment_url",
+			},
+		],
+	}
 
 
 def delete_custom_fields():
 	if not frappe.get_meta("Web Form").has_field("payments_tab"):
 		return
 
-	click.secho("* Uninstalling Payment Custom Fields from Web Form")
+	click.secho("* Uninstalling Payments Custom Fields from Web Form")
 	frappe.db.delete(
 		"Custom Field",
 		{
@@ -189,6 +325,44 @@ def delete_custom_fields():
 	)
 
 	frappe.clear_cache(doctype="Web Form")
+
+
+def delete_payments_erpnext_custom_fields():
+	# Only requires Payments: also runs when ERPNext has been removed, to drop orphan fields.
+	if "payments" not in frappe.get_installed_apps():
+		return
+
+	custom_fields = {
+		"GoCardless Mandate": ("customer",),
+		"Payment Gateway Account": ("company", "payment_account"),
+		"Payment Gateway": ("pga_section", "payment_gateway_account"),
+		"Subscription Plan": ("payment_gateway", "payment_account"),
+		"Payment Request": (
+			"payment_details_section",
+			"payment_gateway",
+			"payment_account",
+			"payment_channel",
+			"column_break_pnyv",
+			"payment_url",
+			"phone_number",
+		),
+	}
+
+	for doctype, fieldnames in custom_fields.items():
+		if not frappe.db.exists("DocType", doctype):
+			continue
+
+		click.secho(f"* Uninstalling Payments Custom Fields from {doctype}")
+
+		frappe.db.delete(
+			"Custom Field",
+			{
+				"dt": doctype,
+				"fieldname": ("in", fieldnames),
+			},
+		)
+
+		frappe.clear_cache(doctype=doctype)
 
 
 def before_install():
@@ -215,3 +389,20 @@ def erpnext_app_import_guard():
 		yield
 	except ImportError:
 		frappe.throw(msg, title=_("Missing ERPNext App"))
+
+
+def validate_erpnext_compatibility():
+	"""Ensure ERPNext app is compatible before site migration."""
+
+	if "erpnext" not in frappe.get_installed_apps():
+		return
+
+	try:
+		erpnext_utils = import_module("erpnext.setup.utils")
+	except Exception:
+		frappe.throw(_("Unable to load Erpnext utilities.\n\n") + frappe.get_traceback())
+
+	if not hasattr(erpnext_utils, "validate_payments_compatibility"):
+		frappe.throw(
+			_("Incompatible ERPNext app version detected. Please update the ERPNext app before migration.")
+		)

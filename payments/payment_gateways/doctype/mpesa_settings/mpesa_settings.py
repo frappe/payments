@@ -336,8 +336,12 @@ def create_mode_of_payment(gateway, payment_type="General"):
 	with erpnext_app_import_guard():
 		from erpnext import get_default_company
 
+	company = get_default_company()
+
 	payment_gateway_account = frappe.db.get_value(
-		"Payment Gateway Account", {"payment_gateway": gateway}, ["payment_account"]
+		"Payment Gateway Account",
+		{"parent": gateway, "parenttype": "Payment Gateway", "company": company, "is_default": 1},
+		["payment_account"],
 	)
 
 	mode_of_payment = frappe.db.exists("Mode of Payment", gateway)
@@ -351,7 +355,7 @@ def create_mode_of_payment(gateway, payment_type="General"):
 				"accounts": [
 					{
 						"doctype": "Mode of Payment Account",
-						"company": get_default_company(),
+						"company": company,
 						"default_account": payment_gateway_account,
 					}
 				],

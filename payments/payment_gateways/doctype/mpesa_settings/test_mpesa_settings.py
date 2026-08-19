@@ -53,7 +53,8 @@ class TestMpesaSettings(PaymentsTestSuite):
 
 	def test_creation_of_payment_gateway(self, mock_stk_push, mock_get_account_balance):
 		mode_of_payment = create_mode_of_payment("Mpesa-_Test", payment_type="Phone")
-		self.assertTrue(frappe.db.exists("Payment Gateway Account", {"payment_gateway": "Mpesa-_Test"}))
+		self.assertTrue(frappe.db.exists("Payment Gateway Account", {"parent": "Mpesa-_Test"}))
+		self.assertTrue(mode_of_payment.name)
 		self.assertEqual(mode_of_payment.type, "Phone")
 
 	def test_processing_of_account_balance(self, mock_stk_push, mock_get_account_balance):
@@ -97,7 +98,7 @@ class TestMpesaSettings(PaymentsTestSuite):
 
 		create_opening_entry(self.pos_profile, frappe.session.user)
 		mpesa_account = frappe.db.get_value(
-			"Payment Gateway Account", {"payment_gateway": "Mpesa-Payment"}, "payment_account"
+			"Payment Gateway Account", {"parent": "Mpesa-Payment"}, "payment_account"
 		)
 		frappe.db.set_value("Account", mpesa_account, "account_currency", "KES")
 		pos_invoice = create_pos_invoice(
@@ -160,7 +161,7 @@ class TestMpesaSettings(PaymentsTestSuite):
 
 		create_opening_entry(self.pos_profile, frappe.session.user)
 		mpesa_account = frappe.db.get_value(
-			"Payment Gateway Account", {"payment_gateway": "Mpesa-Payment"}, "payment_account"
+			"Payment Gateway Account", {"parent": "Mpesa-Payment"}, "payment_account"
 		)
 		frappe.db.set_value("Account", mpesa_account, "account_currency", "KES")
 		frappe.db.set_value("Mpesa Settings", "Payment", "transaction_limit", "500")
@@ -237,7 +238,7 @@ class TestMpesaSettings(PaymentsTestSuite):
 
 		create_opening_entry(self.pos_profile, frappe.session.user)
 		mpesa_account = frappe.db.get_value(
-			"Payment Gateway Account", {"payment_gateway": "Mpesa-Payment"}, "payment_account"
+			"Payment Gateway Account", {"parent": "Mpesa-Payment"}, "payment_account"
 		)
 		frappe.db.set_value("Account", mpesa_account, "account_currency", "KES")
 		frappe.db.set_value("Mpesa Settings", "Payment", "transaction_limit", "500")
