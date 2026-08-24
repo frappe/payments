@@ -13,9 +13,8 @@ from urllib.parse import urlencode
 
 import frappe
 from frappe import _
-from frappe.integrations.utils import make_delete_request, make_get_request, make_post_request
 from frappe.model.document import Document
-from frappe.utils import call_hook_method, get_url
+from frappe.utils import call_hook_method, get_request_session, get_url
 
 from payments.recurring import RecurringPaymentCapabilityError, RecurringPaymentValidationError
 from payments.utils import create_payment_gateway
@@ -377,24 +376,31 @@ class MollieSettings(Document):
 		return self._request("DELETE", path, idempotency_key=idempotency_key)
 
 	def _request(self, method, path, *, payload=None, idempotency_key=None):
+		if method not in {"GET", "POST", "DELETE"}:
+			raise ValueError(f"Unsupported Mollie HTTP method {method}")
 		url = f"{MOLLIE_API_BASE}{path}"
-		headers = self._headers(idempotency_key)
 		try:
-			if method == "GET":
-				response = make_get_request(url=url, headers=headers, timeout=30)
-			elif method == "POST":
-				response = make_post_request(url=url, headers=headers, json=payload, timeout=30)
-			elif method == "DELETE":
-				response = make_delete_request(url=url, headers=headers, timeout=30)
-			else:
-				raise ValueError(f"Unsupported Mollie HTTP method {method}")
+			response = get_request_session().request(
+				method,
+				url,
+				headers=self._headers(idempotency_key),
+				json=payload if method == "POST" else None,
+				timeout=30,
+			)
+			response.raise_for_status()
 		except Exception as exception:
 			if _exception_status_code(exception) == 404:
 				raise MollieResourceNotFound(path) from exception
 			raise
-		if method != "DELETE" and not isinstance(response, Mapping):
+		if method == "DELETE":
+			return None
+		try:
+			result = response.json()
+		except (TypeError, ValueError) as exception:
+			raise RecurringPaymentValidationError("Mollie API returned invalid JSON") from exception
+		if not isinstance(result, Mapping):
 			raise RecurringPaymentValidationError("Mollie API returned a non-object response")
-		return response
+		return result
 
 
 def _project_payment(payment):

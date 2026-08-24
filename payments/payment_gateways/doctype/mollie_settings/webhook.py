@@ -84,7 +84,10 @@ def process_webhook(payment_gateway: str, token: str, payment_id: str) -> tuple[
 			"status": "Queued",
 		}
 	)
-	log.insert(ignore_permissions=True, ignore_if_duplicate=True)
+	# Frappe naming clears a mapping-supplied ``name`` before calling the
+	# Integration Request autoname method. Pass the deterministic transition name
+	# explicitly so the database primary key provides duplicate-race protection.
+	log.insert(ignore_permissions=True, ignore_if_duplicate=True, set_name=log_name)
 	# A concurrent insert can win after the exists check. Its deterministic name
 	# and the deterministic RQ job id below keep the handoff idempotent.
 	status, stored_data = frappe.db.get_value("Integration Request", log_name, ["status", "data"])

@@ -690,33 +690,61 @@ class TestMollieAuthoritativeFetchAndClient(unittest.TestCase):
 		self.assertEqual(bundle["subscription"]["id"], "sub_subscription1")
 		controller._get.assert_called_with("/customers/cst_customer1/subscriptions/sub_subscription1")
 
-	def test_http_adapter_uses_bearer_and_deterministic_idempotency_header(self):
+	def test_http_adapter_uses_timeout_bearer_and_deterministic_idempotency_header(self):
 		controller = settings()
 		key = _derived_idempotency_key("Primary", "merchant-key", "payment")
+		response = MagicMock()
+		response.json.return_value = payment()
+		session = MagicMock()
+		session.request.return_value = response
 		with patch(
-			"payments.payment_gateways.doctype.mollie_settings.mollie_settings.make_post_request",
-			return_value=payment(),
-		) as post:
+			"payments.payment_gateways.doctype.mollie_settings.mollie_settings.get_request_session",
+			return_value=session,
+		):
 			controller._post("/payments", {"test": True}, idempotency_key=key)
-		self.assertEqual(post.call_args.kwargs["url"], f"{MOLLIE_API_BASE}/payments")
-		self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer test_api_key")
-		self.assertEqual(post.call_args.kwargs["headers"]["Idempotency-Key"], key)
+		request = session.request
+		self.assertEqual(request.call_args.args, ("POST", f"{MOLLIE_API_BASE}/payments"))
+		self.assertEqual(request.call_args.kwargs["headers"]["Authorization"], "Bearer test_api_key")
+		self.assertEqual(request.call_args.kwargs["headers"]["Idempotency-Key"], key)
+		self.assertEqual(request.call_args.kwargs["json"], {"test": True})
+		self.assertEqual(request.call_args.kwargs["timeout"], 30)
+		response.raise_for_status.assert_called_once()
 		self.assertEqual(key, _derived_idempotency_key("Primary", "merchant-key", "payment"))
 		self.assertNotEqual(key, _derived_idempotency_key("Other", "merchant-key", "payment"))
+
+	def test_http_adapter_accepts_an_empty_delete_response_without_json_parsing(self):
+		controller = settings()
+		response = MagicMock()
+		session = MagicMock()
+		session.request.return_value = response
+		with patch(
+			"payments.payment_gateways.doctype.mollie_settings.mollie_settings.get_request_session",
+			return_value=session,
+		):
+			self.assertIsNone(
+				controller._delete("/customers/cst_1/subscriptions/sub_1", idempotency_key="key")
+			)
+		self.assertEqual(session.request.call_args.args[0], "DELETE")
+		self.assertEqual(session.request.call_args.kwargs["timeout"], 30)
+		response.raise_for_status.assert_called_once()
+		response.json.assert_not_called()
 
 	def test_remote_404_is_classified_without_hiding_other_failures(self):
 		controller = settings()
 		not_found = RuntimeError("not found")
 		not_found.status_code = 404
+		session = MagicMock()
+		session.request.side_effect = not_found
 		with patch(
-			"payments.payment_gateways.doctype.mollie_settings.mollie_settings.make_get_request",
-			side_effect=not_found,
+			"payments.payment_gateways.doctype.mollie_settings.mollie_settings.get_request_session",
+			return_value=session,
 		):
 			with self.assertRaises(MollieResourceNotFound):
 				controller._get("/payments/tr_unknown")
+		session.request.side_effect = RuntimeError("network down")
 		with patch(
-			"payments.payment_gateways.doctype.mollie_settings.mollie_settings.make_get_request",
-			side_effect=RuntimeError("network down"),
+			"payments.payment_gateways.doctype.mollie_settings.mollie_settings.get_request_session",
+			return_value=session,
 		):
 			with self.assertRaisesRegex(RuntimeError, "network down"):
 				controller._get("/payments/tr_payment1")
