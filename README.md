@@ -29,7 +29,7 @@ All general utils are stored in [utils](payments/utils) directory. The utils are
 
 ## Recurring payments
 
-Provider-neutral recurring-payment controllers can implement the versioned contract documented in [recurring-payments.md](recurring-payments.md). The contract is independent of provider webhooks and application-owned subscription records.
+Provider-neutral recurring-payment controllers can implement the versioned contract documented in [recurring-payments.md](recurring-payments.md). The contract is independent of provider webhooks and application-owned subscription records. Mollie setup, mandate flow, subscriptions, and durable webhook handling are documented in [mollie-recurring-payments.md](mollie-recurring-payments.md).
 
 ## Ongoing Work
 - New API design: https://github.com/frappe/payments/pull/53
