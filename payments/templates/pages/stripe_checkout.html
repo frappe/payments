@@ -47,6 +47,12 @@
 			</div>
 
 			</div>
+			<div class="group col-12">
+				<label class="d-flex align-items-center" style="gap: 6px;">
+					<input type="checkbox" id="save-card" name="save-card" value="1"/>
+					<span>{{ _("Save my card for future payments") }}</span>
+				</label>
+			</div>
 			<button type="submit" class="submit mb-4" id="submit">{{_('Pay')}} {{amount}}</button>
 			<div class="outcome text-center">
 				<div class="error" hidden>{{ _("An error occured during the payment process. Please contact us.") }}</div>
