@@ -37,6 +37,7 @@ __all__ = [
 	"begin_first_payment",
 	"cancel_subscription",
 	"emit_recurring_event",
+	"get_recurring_webhook_url",
 	"normalize_provider_events",
 	"reconcile_subscription",
 	"retry_payment",
@@ -73,6 +74,7 @@ _MAX_PROVIDER_EVENT_ITEMS = 256
 _INTERVAL_RE = re.compile(r"P[1-9][0-9]*[DWMY]")
 _AMOUNT_RE = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?")
 _CURRENCY_RE = re.compile(r"[A-Z]{3}")
+_CUSTOMER_LOCALE_RE = re.compile(r"[a-z]{2}_[A-Z]{2}")
 _CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -146,7 +148,16 @@ _FIRST_PAYMENT_REQUIRED = frozenset(
 		"idempotency_key",
 	}
 )
-_FIRST_PAYMENT_OPTIONAL = frozenset({"contract_version", "metadata"})
+_FIRST_PAYMENT_OPTIONAL = frozenset(
+	{
+		"contract_version",
+		"customer_email",
+		"customer_locale",
+		"customer_name",
+		"metadata",
+		"provider_customer_id",
+	}
+)
 _ACTIVATE_SUBSCRIPTION_REQUIRED = frozenset(
 	{
 		"merchant_reference",
@@ -263,6 +274,18 @@ def begin_first_payment(payment_gateway: str, request: Mapping[str, Any]) -> Fro
 	return _normalize_payment_snapshot(result, expected=normalized)
 
 
+def get_recurring_webhook_url(payment_gateway: str) -> str:
+	"""Return a controller-owned HTTPS endpoint for recurring provider events."""
+	gateway = _normalize_reference(payment_gateway, "payment_gateway", max_length=140)
+	controller = get_payment_gateway_controller(gateway)
+	method = getattr(controller, "get_recurring_webhook_url", None)
+	if not callable(method):
+		raise RecurringPaymentCapabilityError(
+			f"Payment gateway {gateway!r} does not support recurring operation 'get_recurring_webhook_url'"
+		)
+	return _normalize_url(method(), "recurring webhook URL")
+
+
 def activate_subscription(payment_gateway: str, request: Mapping[str, Any]) -> FrozenDict:
 	"""Activate recurring collection after an authoritative valid mandate.
 
@@ -368,22 +391,41 @@ def _normalize_first_payment_request(request) -> FrozenDict:
 	data = _validate_mapping_fields(
 		request, "begin_first_payment", _FIRST_PAYMENT_REQUIRED, _FIRST_PAYMENT_OPTIONAL
 	)
-	return _freeze(
-		{
-			"contract_version": _normalize_version(data),
-			"merchant_reference": _normalize_reference(data["merchant_reference"], "merchant_reference"),
-			"customer_reference": _normalize_reference(data["customer_reference"], "customer_reference"),
-			"amount": _normalize_amount(data["amount"]),
-			"currency": _normalize_currency(data["currency"]),
-			"description": _normalize_text(
-				data["description"], "description", max_length=_MAX_DESCRIPTION_LENGTH
-			),
-			"redirect_url": _normalize_url(data["redirect_url"], "redirect_url", allow_local_http=True),
-			"webhook_url": _normalize_url(data["webhook_url"], "webhook_url"),
-			"idempotency_key": _normalize_reference(data["idempotency_key"], "idempotency_key"),
-			**_metadata_if_present(data),
-		}
-	)
+	if not data.get("provider_customer_id"):
+		missing = [field for field in ("customer_name", "customer_email") if not data.get(field)]
+		if missing:
+			raise RecurringPaymentValidationError(
+				"begin_first_payment requires customer_name and customer_email when "
+				"provider_customer_id is absent"
+			)
+
+	normalized = {
+		"contract_version": _normalize_version(data),
+		"merchant_reference": _normalize_reference(data["merchant_reference"], "merchant_reference"),
+		"customer_reference": _normalize_reference(data["customer_reference"], "customer_reference"),
+		"amount": _normalize_amount(data["amount"]),
+		"currency": _normalize_currency(data["currency"]),
+		"description": _normalize_text(
+			data["description"], "description", max_length=_MAX_DESCRIPTION_LENGTH
+		),
+		"redirect_url": _normalize_url(data["redirect_url"], "redirect_url", allow_local_http=True),
+		"webhook_url": _normalize_url(data["webhook_url"], "webhook_url"),
+		"idempotency_key": _normalize_reference(data["idempotency_key"], "idempotency_key"),
+	}
+	if data.get("provider_customer_id") is not None:
+		normalized["provider_customer_id"] = _normalize_reference(
+			data["provider_customer_id"], "provider_customer_id"
+		)
+	if data.get("customer_name") is not None:
+		normalized["customer_name"] = _normalize_text(
+			data["customer_name"], "customer_name", max_length=_MAX_REFERENCE_LENGTH
+		)
+	if data.get("customer_email") is not None:
+		normalized["customer_email"] = _normalize_email(data["customer_email"])
+	if data.get("customer_locale") is not None:
+		normalized["customer_locale"] = _normalize_customer_locale(data["customer_locale"])
+	normalized.update(_metadata_if_present(data))
+	return _freeze(normalized)
 
 
 def _normalize_activate_subscription_request(request) -> FrozenDict:
@@ -720,6 +762,24 @@ def _normalize_currency(value) -> str:
 	if not _CURRENCY_RE.fullmatch(currency):
 		raise RecurringPaymentValidationError("currency must be a three-letter ISO-style code")
 	return currency
+
+
+def _normalize_email(value) -> str:
+	email = _normalize_text(value, "customer_email", max_length=320)
+	if any(character.isspace() for character in email) or email.count("@") != 1:
+		raise RecurringPaymentValidationError("customer_email must be a plain email address")
+	local_part, domain = email.split("@")
+	if not local_part or len(local_part) > 64 or not domain or len(domain) > 253:
+		raise RecurringPaymentValidationError("customer_email must be a plain email address")
+	return email
+
+
+def _normalize_customer_locale(value) -> str:
+	if not isinstance(value, str) or not _CUSTOMER_LOCALE_RE.fullmatch(value):
+		raise RecurringPaymentValidationError(
+			"customer_locale must use the portable ll_CC format, for example en_GB"
+		)
+	return value
 
 
 def _normalize_reference(value, field, max_length=_MAX_REFERENCE_LENGTH) -> str:

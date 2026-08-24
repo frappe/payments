@@ -15,6 +15,7 @@ This preserves the existing `Payment Gateway` settings/controller indirection, i
 ```python
 from payments import recurring
 
+webhook_url = recurring.get_recurring_webhook_url(payment_gateway)
 payment = recurring.begin_first_payment(payment_gateway, request)
 subscription = recurring.activate_subscription(payment_gateway, request)
 subscription = recurring.cancel_subscription(payment_gateway, request)
@@ -24,7 +25,7 @@ events = recurring.normalize_provider_events(payment_gateway, authoritative_prov
 recurring.emit_recurring_event(event)
 ```
 
-The first six functions resolve the gateway controller and invoke a controller method with the same name. A missing method raises `RecurringPaymentCapabilityError`. In particular, `retry_payment` never falls back to creating another charge.
+Every provider operation resolves the gateway controller through the existing indirection and invokes a controller method with the same name. `get_recurring_webhook_url` calls its controller capability without arguments; the mapping-based operations pass one normalized immutable request. A missing or non-callable method raises `RecurringPaymentCapabilityError`. In particular, `retry_payment` never falls back to creating another charge.
 
 All request, result, snapshot, and event mappings reject unknown fields. `contract_version` is optional on input, defaults to `1`, is always present in normalized output, and rejects any value other than integer `1`.
 
@@ -34,12 +35,18 @@ Normalized mappings and nested metadata are immutable `dict`/`list` subclasses t
 
 - `merchant_reference`, `customer_reference`, `idempotency_key`, event IDs, and provider IDs are required non-empty, trimmed opaque strings of at most 255 characters unless marked optional.
 - Control characters are forbidden in identifiers and text.
+- `customer_name` is trimmed non-empty text of at most 255 characters. `customer_email` is a plain, trimmed address of at most 320 characters with exactly one `@`, a non-empty local part of at most 64 characters, a non-empty domain of at most 253 characters, and no whitespace or control characters. Provider-specific deliverability remains the provider's responsibility.
+- `customer_locale` uses the portable `ll_CC` form (for example, `en_GB`): two lowercase language letters, an underscore, and two uppercase country letters. Providers may reject syntactically valid locales they do not support.
 - `amount` must be a positive finite `Decimal` or canonical fixed-point decimal string (for example, `"12.50"`). Floats, integers, exponent notation, signs, and leading-zero forms are rejected for string inputs. Normalized amounts are fixed-point strings, with at most 18 integer and 9 fractional digits.
 - `currency` must contain exactly three ASCII letters and is normalized to uppercase.
 - `interval` is a portable single-unit ISO-8601 duration: `P<n>D`, `P<n>W`, `P<n>M`, or `P<n>Y`, where `n` is positive.
 - Dates use exact `YYYY-MM-DD`. Timestamps are RFC-3339/ISO-8601 strings with an explicit timezone.
 - URLs must be absolute HTTPS URLs, contain no credentials, fragments, control characters, or backslashes, and be at most 2,048 characters. Redirect and checkout URLs may use HTTP only for `localhost`, `127.0.0.1`, or `::1`; webhook URLs always require HTTPS.
 - Optional `metadata` is JSON data limited to 32 top-level keys, 32 keys/items per nested container, four nesting levels, 64-character string keys, and 4 KiB serialized. Non-finite numbers and non-JSON values are rejected.
+
+## Recurring webhook transport URL
+
+`get_recurring_webhook_url(payment_gateway)` resolves the selected Payment Gateway controller and calls its no-argument `get_recurring_webhook_url` method. The controller owns account-safe provider routing; the consumer does not construct provider routes or import provider code. The result must be one absolute HTTPS URL with no credentials, fragment, control characters, or backslashes. HTTP is rejected even for local hosts. The URL is suitable for the `webhook_url` request field; transport authentication and authoritative provider fetches remain the adapter's responsibility.
 
 ## Requests
 
@@ -52,9 +59,11 @@ merchant_reference, customer_reference, amount, currency, description,
 redirect_url, webhook_url, idempotency_key
 ```
 
-Optional fields: `contract_version`, `metadata`.
+Optional fields: `contract_version`, `metadata`, `provider_customer_id`, `customer_name`, `customer_email`, `customer_locale`.
 
-The provider should create or reuse its customer and begin the on-session first payment used to establish a mandate. The result is a payment snapshot.
+For a new provider customer, omit `provider_customer_id` and supply both `customer_name` and `customer_email`; the controller creates the provider customer and returns its opaque ID in the payment snapshot. For reuse, supply `provider_customer_id`; name and email may then be omitted. If optional name, email, or locale values are supplied in either flow, they are normalized and bounded as documented above. A provider result cannot change a supplied `provider_customer_id`.
+
+The provider begins the on-session first payment used to establish a mandate. The result is a payment snapshot.
 
 ### `activate_subscription`
 
@@ -208,7 +217,7 @@ The core deliberately does not call a method on a `reference_doctype`, commit a 
 
 ## Provider implementation checklist
 
-1. Implement only supported methods on the settings controller resolved by `Payment Gateway`.
+1. Implement only supported methods on the settings controller resolved by `Payment Gateway`; when webhooks are supported, return an account-safe HTTPS transport endpoint from the no-argument `get_recurring_webhook_url` capability.
 2. Make every mutating operation idempotent under the supplied `idempotency_key`.
 3. Return only the documented normalized fields; keep raw provider payloads and secrets out of results and metadata.
 4. Obtain webhook state authoritatively and account-scope it before normalization.

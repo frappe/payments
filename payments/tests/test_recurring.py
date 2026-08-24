@@ -16,6 +16,7 @@ from payments.recurring import (
 	begin_first_payment,
 	cancel_subscription,
 	emit_recurring_event,
+	get_recurring_webhook_url,
 	normalize_provider_events,
 	reconcile_subscription,
 	retry_payment,
@@ -26,6 +27,8 @@ def first_payment_request(**overrides):
 	request = {
 		"merchant_reference": "order/customer:42",
 		"customer_reference": "customer/opaque:α",
+		"customer_name": "Ada Learner",
+		"customer_email": "ada@example.test",
 		"amount": "12.50",
 		"currency": "eur",
 		"description": "First payment",
@@ -238,6 +241,80 @@ class TestFirstPayment(RecurringContractTestCase):
 				with self.assertRaises(RecurringPaymentValidationError):
 					begin_first_payment("Fake Gateway", first_payment_request(**{field: url}))
 
+	def test_new_customer_requires_and_normalizes_bounded_identity_fields(self):
+		def create(request):
+			self.assertEqual(request["customer_name"], "Ada Learner")
+			self.assertEqual(request["customer_email"], "ada@example.test")
+			self.assertEqual(request["customer_locale"], "en_GB")
+			self.assertNotIn("provider_customer_id", request)
+			return payment_snapshot()
+
+		controller = self.controller_for(begin_first_payment=create)
+		self.dispatch_with(
+			controller,
+			begin_first_payment,
+			"Fake Gateway",
+			first_payment_request(customer_locale="en_GB"),
+		)
+
+		for missing_field in ("customer_name", "customer_email"):
+			request = first_payment_request()
+			del request[missing_field]
+			with self.subTest(missing_field=missing_field):
+				with patch("payments.recurring.get_payment_gateway_controller") as resolver:
+					with self.assertRaisesRegex(RecurringPaymentValidationError, "provider_customer_id"):
+						begin_first_payment("Fake Gateway", request)
+				resolver.assert_not_called()
+
+	def test_existing_provider_customer_can_be_reused_without_name_or_email(self):
+		request = first_payment_request(provider_customer_id="customer-provider/1")
+		del request["customer_name"]
+		del request["customer_email"]
+		controller = self.controller_for(
+			begin_first_payment=lambda normalized: payment_snapshot(
+				provider_customer_id=normalized["provider_customer_id"]
+			)
+		)
+
+		result = self.dispatch_with(controller, begin_first_payment, "Fake Gateway", request)
+
+		normalized = controller.begin_first_payment.call_args.args[0]
+		self.assertEqual(normalized["provider_customer_id"], "customer-provider/1")
+		self.assertNotIn("customer_name", normalized)
+		self.assertNotIn("customer_email", normalized)
+		self.assertEqual(result["provider_customer_id"], "customer-provider/1")
+
+	def test_validates_optional_customer_identity_fields_and_reused_customer_correlation(self):
+		invalid_fields = (
+			("customer_name", " " + "x" * 255),
+			("customer_email", "not-an-email"),
+			("customer_email", "two@@example.test"),
+			("customer_email", "local @example.test"),
+			("customer_email", f"{'x' * 65}@example.test"),
+			("customer_locale", "en-GB"),
+			("customer_locale", "EN_gb"),
+			("customer_locale", "english_GB"),
+		)
+		for field, value in invalid_fields:
+			with self.subTest(field=field, value=value):
+				with patch("payments.recurring.get_payment_gateway_controller") as resolver:
+					with self.assertRaises(RecurringPaymentValidationError):
+						begin_first_payment("Fake Gateway", first_payment_request(**{field: value}))
+				resolver.assert_not_called()
+
+		controller = self.controller_for(
+			begin_first_payment=lambda request: payment_snapshot(
+				provider_customer_id="different-provider-customer"
+			)
+		)
+		with self.assertRaisesRegex(RecurringPaymentValidationError, "provider_customer_id"):
+			self.dispatch_with(
+				controller,
+				begin_first_payment,
+				"Fake Gateway",
+				first_payment_request(provider_customer_id="customer-provider/1"),
+			)
+
 	def test_accepts_authorized_as_a_lossless_payment_status(self):
 		controller = self.controller_for(
 			begin_first_payment=lambda request: payment_snapshot(status="authorized")
@@ -258,6 +335,42 @@ class TestFirstPayment(RecurringContractTestCase):
 					self.dispatch_with(
 						controller, begin_first_payment, "Fake Gateway", first_payment_request()
 					)
+
+
+class TestRecurringWebhookUrl(RecurringContractTestCase):
+	def test_resolves_controller_and_calls_its_no_argument_capability(self):
+		controller = self.controller_for(
+			get_recurring_webhook_url=lambda: "https://payments.example.test/mollie?account=opaque"
+		)
+
+		url = self.dispatch_with(controller, get_recurring_webhook_url, "Fake Gateway")
+
+		self.assertEqual(url, "https://payments.example.test/mollie?account=opaque")
+		controller.get_recurring_webhook_url.assert_called_once_with()
+
+	def test_missing_or_non_callable_capability_raises_a_clear_error(self):
+		for controller in (object(), type("Controller", (), {"get_recurring_webhook_url": "not callable"})()):
+			with self.subTest(controller=controller):
+				with patch("payments.recurring.get_payment_gateway_controller", return_value=controller):
+					with self.assertRaisesRegex(RecurringPaymentCapabilityError, "get_recurring_webhook_url"):
+						get_recurring_webhook_url("Fake Gateway")
+
+	def test_requires_one_strict_safe_https_transport_url(self):
+		unsafe_urls = (
+			"http://payments.example.test/hook",
+			"http://127.0.0.1:8000/hook",
+			"https://user:secret@payments.example.test/hook",
+			"https://payments.example.test/hook#secret",
+			"https://payments.example.test\\@evil.test/hook",
+			"https://[not-an-ipv6-address]/hook",
+			"/api/method/provider.hook",
+			{"url": "https://payments.example.test/hook"},
+		)
+		for unsafe_url in unsafe_urls:
+			with self.subTest(url=unsafe_url):
+				controller = self.controller_for(get_recurring_webhook_url=lambda value=unsafe_url: value)
+				with self.assertRaises(RecurringPaymentValidationError):
+					self.dispatch_with(controller, get_recurring_webhook_url, "Fake Gateway")
 
 
 class TestSubscriptionOperations(RecurringContractTestCase):
