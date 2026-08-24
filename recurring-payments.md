@@ -134,10 +134,13 @@ Optional fields:
 
 ```text
 contract_version, checkout_url, provider_customer_id,
-provider_mandate_id, provider_subscription_id, occurred_at, metadata
+provider_mandate_id, provider_subscription_id, refunded_amount,
+charged_back_amount, occurred_at, metadata
 ```
 
-Statuses: `open`, `pending`, `authorized`, `paid`, `failed`, `canceled`, `expired`, `refunded`. `authorized` preserves providers that distinguish authorization from capture.
+Statuses: `open`, `pending`, `authorized`, `paid`, `failed`, `canceled`, `expired`, `partially_refunded`, `refunded`, `partially_charged_back`, `charged_back`. `authorized` preserves providers that distinguish authorization from capture.
+
+`refunded_amount` and `charged_back_amount` are positive decimal amounts in the snapshot currency. Each must not exceed the original `amount`, and together they must not exceed it. Reversal normalization is deterministic: any chargeback takes precedence over refund status selection; a chargeback equal to the original amount uses `charged_back`, otherwise `partially_charged_back`. Without a chargeback, a refund equal to the original amount uses `refunded`, otherwise `partially_refunded`. A reversal status requires its corresponding amount field, and a supplied reversal amount requires the matching normalized status. Both amount fields remain present when refunds and chargebacks coexist, so consumers do not lose monetary state.
 
 ### Subscription snapshot
 
@@ -211,7 +214,7 @@ call_hook_method("recurring_payment_event", event=normalized_event)
 
 The core delivery helper is synchronous only: it does not itself provide at-least-once delivery, persistence, deduplication, or retry. To provide at-least-once delivery, a provider transport **MUST** durably persist and deduplicate each authoritative transition before calling the hook and **MUST** retry when delivery raises.
 
-`event_id` **MUST** be stable for every redelivery of one authoritative resource-state transition and **MUST** differ for later authoritative status transitions of that resource. A mutable provider resource ID alone is therefore insufficient when the same resource can change status; adapters can derive an opaque transition ID from the account-scoped resource ID plus authoritative status/version/timestamp data. Consumers must make writes idempotent using `payment_gateway + event_id` (and their own agreement identity as appropriate), tolerate duplicate and out-of-order updates, and never assume exactly-once hook execution.
+`event_id` **MUST** be stable for every redelivery of one authoritative resource-state transition and **MUST** differ for later authoritative status transitions of that resource. For payment events, transition identity **MUST** include the normalized status and the normalized `refunded_amount` and `charged_back_amount` values when present, so two partial reversals of the same payment remain distinguishable even when the status string is unchanged. A mutable provider resource ID alone is therefore insufficient when the same resource can change status; adapters can derive an opaque transition ID from the account-scoped resource ID plus authoritative status, reversal amounts, version, or timestamp data. Consumers must make writes idempotent using `payment_gateway + event_id` (and their own agreement identity as appropriate), tolerate duplicate and out-of-order updates, and never assume exactly-once hook execution.
 
 The core deliberately does not call a method on a `reference_doctype`, commit a transaction, enqueue a job, persist an agreement, or decide application access policy.
 

@@ -46,7 +46,19 @@ __all__ = [
 CONTRACT_VERSION = 1
 
 PAYMENT_STATUSES = frozenset(
-	{"open", "pending", "authorized", "paid", "failed", "canceled", "expired", "refunded"}
+	{
+		"open",
+		"pending",
+		"authorized",
+		"paid",
+		"failed",
+		"canceled",
+		"expired",
+		"partially_refunded",
+		"refunded",
+		"partially_charged_back",
+		"charged_back",
+	}
 )
 SUBSCRIPTION_STATUSES = frozenset(
 	{"pending", "pending_mandate", "active", "suspended", "canceled", "completed", "failed"}
@@ -206,6 +218,8 @@ _PAYMENT_RESULT_FIELDS = frozenset(
 		"status",
 		"amount",
 		"currency",
+		"refunded_amount",
+		"charged_back_amount",
 		"merchant_reference",
 		"customer_reference",
 		"checkout_url",
@@ -521,6 +535,10 @@ def _normalize_payment_snapshot(result, *, expected=None) -> FrozenDict:
 		normalized,
 		("provider_customer_id", "provider_mandate_id", "provider_subscription_id"),
 	)
+	for field in ("refunded_amount", "charged_back_amount"):
+		if data.get(field) is not None:
+			normalized[field] = _normalize_amount(data[field])
+	_validate_payment_reversals(normalized)
 	if data.get("checkout_url") is not None:
 		normalized["checkout_url"] = _normalize_url(
 			data["checkout_url"], "checkout_url", allow_local_http=True
@@ -540,6 +558,8 @@ def _normalize_payment_snapshot(result, *, expected=None) -> FrozenDict:
 			"provider_subscription_id",
 			"amount",
 			"currency",
+			"refunded_amount",
+			"charged_back_amount",
 		),
 	)
 	return _freeze(normalized)
@@ -762,6 +782,36 @@ def _normalize_currency(value) -> str:
 	if not _CURRENCY_RE.fullmatch(currency):
 		raise RecurringPaymentValidationError("currency must be a three-letter ISO-style code")
 	return currency
+
+
+def _validate_payment_reversals(payment) -> None:
+	amount = Decimal(payment["amount"])
+	refunded = Decimal(payment["refunded_amount"]) if "refunded_amount" in payment else Decimal(0)
+	charged_back = Decimal(payment["charged_back_amount"]) if "charged_back_amount" in payment else Decimal(0)
+	if refunded > amount:
+		raise RecurringPaymentValidationError("refunded_amount cannot exceed the original amount")
+	if charged_back > amount:
+		raise RecurringPaymentValidationError("charged_back_amount cannot exceed the original amount")
+	if refunded + charged_back > amount:
+		raise RecurringPaymentValidationError(
+			"refunded_amount and charged_back_amount cannot exceed the original amount in total"
+		)
+
+	status = payment["status"]
+	if charged_back:
+		expected_status = "charged_back" if charged_back == amount else "partially_charged_back"
+	elif refunded:
+		expected_status = "refunded" if refunded == amount else "partially_refunded"
+	else:
+		expected_status = None
+	if expected_status and status != expected_status:
+		raise RecurringPaymentValidationError(
+			f"payment status must be {expected_status!r} for its normalized reversal amounts"
+		)
+	if status in {"refunded", "partially_refunded"} and not refunded:
+		raise RecurringPaymentValidationError(f"payment status {status!r} requires refunded_amount")
+	if status in {"charged_back", "partially_charged_back"} and not charged_back:
+		raise RecurringPaymentValidationError(f"payment status {status!r} requires charged_back_amount")
 
 
 def _normalize_email(value) -> str:

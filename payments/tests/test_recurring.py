@@ -322,6 +322,82 @@ class TestFirstPayment(RecurringContractTestCase):
 		result = self.dispatch_with(controller, begin_first_payment, "Fake Gateway", first_payment_request())
 		self.assertEqual(result["status"], "authorized")
 
+	def test_normalizes_full_partial_refund_and_chargeback_amounts(self):
+		cases = (
+			("partially_refunded", {"refunded_amount": Decimal("2.500")}, "2.500", None),
+			("refunded", {"refunded_amount": "12.50"}, "12.50", None),
+			("partially_charged_back", {"charged_back_amount": Decimal("3.00")}, None, "3.00"),
+			("charged_back", {"charged_back_amount": "12.50"}, None, "12.50"),
+			(
+				"partially_charged_back",
+				{"refunded_amount": "2.00", "charged_back_amount": "3.00"},
+				"2.00",
+				"3.00",
+			),
+		)
+		for status, reversals, refunded, charged_back in cases:
+			with self.subTest(status=status, reversals=reversals):
+				controller = self.controller_for(
+					begin_first_payment=lambda request, status=status, reversals=reversals: payment_snapshot(
+						status=status, **reversals
+					)
+				)
+				result = self.dispatch_with(
+					controller, begin_first_payment, "Fake Gateway", first_payment_request()
+				)
+				self.assertEqual(result["amount"], "12.50")
+				self.assertEqual(result.get("refunded_amount"), refunded)
+				self.assertEqual(result.get("charged_back_amount"), charged_back)
+				with self.assertRaises(TypeError):
+					result["refunded_amount"] = "1.00"
+
+	def test_rejects_invalid_or_excessive_reversal_amounts(self):
+		invalid = (
+			payment_snapshot(status="partially_refunded", refunded_amount="0"),
+			payment_snapshot(status="partially_refunded", refunded_amount="-1.00"),
+			payment_snapshot(status="partially_refunded", refunded_amount=1.5),
+			payment_snapshot(status="partially_refunded", refunded_amount="12.51"),
+			payment_snapshot(status="partially_charged_back", charged_back_amount="12.51"),
+			payment_snapshot(
+				status="partially_charged_back",
+				refunded_amount="7.00",
+				charged_back_amount="6.00",
+			),
+		)
+		for result in invalid:
+			with self.subTest(result=result):
+				controller = self.controller_for(begin_first_payment=lambda request, result=result: result)
+				with self.assertRaises(RecurringPaymentValidationError):
+					self.dispatch_with(
+						controller, begin_first_payment, "Fake Gateway", first_payment_request()
+					)
+
+	def test_requires_reversal_statuses_and_amounts_to_correspond(self):
+		invalid = (
+			payment_snapshot(status="partially_refunded"),
+			payment_snapshot(status="refunded", refunded_amount="2.00"),
+			payment_snapshot(status="paid", refunded_amount="2.00"),
+			payment_snapshot(status="partially_charged_back"),
+			payment_snapshot(status="charged_back", charged_back_amount="2.00"),
+			payment_snapshot(status="paid", charged_back_amount="2.00"),
+		)
+		for result in invalid:
+			with self.subTest(result=result):
+				controller = self.controller_for(begin_first_payment=lambda request, result=result: result)
+				with self.assertRaisesRegex(RecurringPaymentValidationError, "status|requires"):
+					self.dispatch_with(
+						controller, begin_first_payment, "Fake Gateway", first_payment_request()
+					)
+
+	def test_reversal_snapshot_keeps_original_amount_correlation(self):
+		controller = self.controller_for(
+			begin_first_payment=lambda request: payment_snapshot(
+				status="partially_refunded", amount="2.00", refunded_amount="1.00"
+			)
+		)
+		with self.assertRaisesRegex(RecurringPaymentValidationError, "amount"):
+			self.dispatch_with(controller, begin_first_payment, "Fake Gateway", first_payment_request())
+
 	def test_rejects_provider_results_that_change_correlated_values_or_add_fields(self):
 		for result in (
 			payment_snapshot(amount="99.00"),
@@ -580,6 +656,31 @@ class TestProviderEvents(RecurringContractTestCase):
 		self.assertEqual(events[0]["payment_gateway"], "Fake Gateway")
 		self.assertEqual(events[0]["payment"]["status"], "paid")
 		self.assertEqual(provider_body["nested"]["status"], "paid")
+
+	def test_preserves_distinct_partial_reversal_transitions(self):
+		def event(event_id, refunded_amount):
+			return recurring_event(
+				event_id=event_id,
+				payment=payment_snapshot(status="partially_refunded", refunded_amount=refunded_amount),
+			)
+
+		provider_events = {
+			"first": [event("event/provider:1/refunded:2.00", "2.00")],
+			"second": [event("event/provider:1/refunded:3.00", "3.00")],
+		}
+		controller = self.controller_for(
+			normalize_provider_events=lambda payload: provider_events[payload["transition"]]
+		)
+		first = self.dispatch_with(
+			controller, normalize_provider_events, "Fake Gateway", {"transition": "first"}
+		)[0]
+		second = self.dispatch_with(
+			controller, normalize_provider_events, "Fake Gateway", {"transition": "second"}
+		)[0]
+
+		self.assertNotEqual(first["event_id"], second["event_id"])
+		self.assertEqual(first["payment"]["refunded_amount"], "2.00")
+		self.assertEqual(second["payment"]["refunded_amount"], "3.00")
 
 	def test_rejects_event_gateway_spoofing_missing_snapshots_and_wrong_event_shapes(self):
 		invalid_events = (
