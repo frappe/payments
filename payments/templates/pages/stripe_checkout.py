@@ -41,13 +41,23 @@ def get_context(context):
 		context["amount"] = fmt_money(amount=context["amount"], currency=context["currency"])
 
 		if is_a_subscription(context.reference_doctype, context.reference_docname):
-			payment_plan = frappe.db.get_value(
-				context.reference_doctype, context.reference_docname, "payment_plan"
+			payment_plans = frappe.db.get_all(
+				"Subscription Plan Detail",
+				filters={"parent": context.reference_docname, "parenttype": context.reference_doctype},
+				fields=["plan"],
+				limit=1
 			)
-			recurrence = frappe.db.get_value("Payment Plan", payment_plan, "recurrence")
+			if payment_plans:
+				billing_interval, billing_interval_count = frappe.db.get_value(
+					"Subscription Plan", payment_plans[0].plan, ["billing_interval", "billing_interval_count"]
+				)
+				billing_interval_count = cint(billing_interval_count) or 1
+				if billing_interval_count == 1:
+					recurrence = _("per {0}").format(_(billing_interval))
+				else:
+					recurrence = _("every {0} {1}s").format(billing_interval_count, _(billing_interval))
 
-			context["amount"] = context["amount"] + " " + _(recurrence)
-
+				context["amount"] = context["amount"] + " " + recurrence
 	else:
 		frappe.redirect_to_message(
 			_("Some information is missing"),
