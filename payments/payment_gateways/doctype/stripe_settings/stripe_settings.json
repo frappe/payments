@@ -265,6 +265,56 @@
    "set_only_once": 0,
    "translatable": 0,
    "unique": 0
+  },
+  {
+   "fieldname": "configuration_section",
+   "fieldtype": "Section Break",
+   "label": "Configuration"
+  },
+  {
+   "default": "Hosted Checkout",
+   "description": "Hosted Checkout redirects to a Stripe-hosted page (recommended, SCA/3DS ready). Embedded Elements renders the card form on this site.",
+   "fieldname": "checkout_mode",
+   "fieldtype": "Select",
+   "label": "Checkout Mode",
+   "options": "Hosted Checkout\nEmbedded Elements"
+  },
+  {
+   "default": "0",
+   "description": "If enabled, a Subscription Plan's Stripe price is auto-synced from its ERPNext cost on save.",
+   "fieldname": "sync_subscription_price",
+   "fieldtype": "Check",
+   "label": "Sync Subscription Plan Price to Stripe"
+  },
+  {
+   "fieldname": "configuration_cb",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Bill From Cycle One",
+   "description": "Bill From Cycle One: Stripe bills price×quantity immediately as the first invoice. Charge Now + Defer First Cycle: charge the Payment Request grand total now and defer the subscription's first billing to the next cycle.",
+   "fieldname": "subscription_billing_model",
+   "fieldtype": "Select",
+   "label": "Subscription Billing Model",
+   "options": "Bill From Cycle One\nCharge Now + Defer First Cycle"
+  },
+  {
+   "fieldname": "webhooks_section",
+   "fieldtype": "Section Break",
+   "label": "Webhooks"
+  },
+  {
+   "description": "Stripe webhook signing secret (whsec_...). Required for the webhook endpoint to verify and process events.",
+   "fieldname": "webhook_secret",
+   "fieldtype": "Password",
+   "label": "Webhook Signing Secret"
+  },
+  {
+   "description": "Point a Stripe webhook endpoint at this URL (copy into the Stripe dashboard).",
+   "fieldname": "webhook_endpoint",
+   "fieldtype": "Data",
+   "label": "Webhook URL",
+   "read_only": 1
   }
  ],
  "has_web_view": 0,
@@ -277,7 +327,7 @@
  "issingle": 0,
  "istable": 0,
  "max_attachments": 0,
- "modified": "2022-07-24 13:32:14.429916",
+ "modified": "2026-06-26 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Payment Gateways",
  "name": "Stripe Settings",
