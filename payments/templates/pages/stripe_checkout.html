@@ -39,13 +39,19 @@
 					</div>
 				</div>
 				<div class="group col-12">
-					<label>
+					<label class="card-details">
 					<span>{{ _("Card Details") }}</span>
 				<div id="card-element" name="card-element" class="field"></div>
 				<div id="card-errors" role="alert"></div>
 			</label>
 			</div>
 
+			</div>
+			<div class="group col-12">
+				<label class="d-flex align-items-center save-card" style="gap: 6px;">
+					<input type="checkbox" id="save-card" name="save-card" value="1"/>
+					<span>{{ _("Save my card") }}</span>
+				</label>
 			</div>
 			<button type="submit" class="submit mb-4" id="submit">{{_('Pay')}} {{amount}}</button>
 			<div class="outcome text-center">

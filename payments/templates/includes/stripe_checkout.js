@@ -1,86 +1,164 @@
+// Embedded Elements checkout using PaymentIntents + PaymentElement.
+// Flow: create an (unconfirmed) PaymentIntent on the server -> mount the
+// PaymentElement with its client_secret -> confirm client-side (handles 3DS)
+// -> hand the confirmed PaymentIntent id back to the server to finalize.
+
 var stripe = Stripe("{{ publishable_key }}");
 
-var elements = stripe.elements();
-
-var style = {
-	base: {
-		color: '#32325d',
-		lineHeight: '18px',
-		fontFamily: '"Helvetica Neue", Helvetica, sans-serif',
-		fontSmoothing: 'antialiased',
-		fontSize: '16px',
-		'::placeholder': {
-			color: '#aab7c4'
-		}
-	},
-	invalid: {
-		color: '#fa755a',
-		iconColor: '#fa755a'
-	}
+var checkoutData = {
+	data: JSON.stringify({{ frappe.form_dict|json }}),
+	reference_doctype: {{ reference_doctype | tojson }},
+	reference_docname: {{ reference_docname | tojson }},
+	payment_gateway: {{ payment_gateway | tojson }}
 };
 
-var card = elements.create('card', {
-	hidePostalCode: true,
-	style: style
-});
+var elements;
+var paymentElement;
+var clientSecret;
+var paymentIntentId;
 
-card.mount('#card-element');
-
-function setOutcome(result) {
-
-	if (result.token) {
-		$('#submit').prop('disabled', true)
-		$('#submit').html(__('Processing...'))
-		frappe.call({
-			method:"payments.templates.pages.stripe_checkout.make_payment",
-			freeze:true,
-			headers: {"X-Requested-With": "XMLHttpRequest"},
-			args: {
-				"stripe_token_id": result.token.id,
-				"data": JSON.stringify({{ frappe.form_dict|json }}),
-				"reference_doctype": "{{ reference_doctype }}",
-				"reference_docname": "{{ reference_docname }}",
-				"payment_gateway": "{{ payment_gateway }}"
-			},
-			callback: function(r) {
-				if (r.message.status == "Completed") {
-					$('#submit').hide()
-					$('.success').show()
-					setTimeout(function() {
-						window.location.href = r.message.redirect_to
-					}, 2000);
-				} else {
-					$('#submit').hide()
-					$('.error').show()
-					setTimeout(function() {
-						window.location.href = r.message.redirect_to
-					}, 2000);
-				}
-			}
-		});
-
-	} else if (result.error) {
-		$('.error').html(result.error.message);
-		$('.error').show()
+function showError(message) {
+	var displayError = document.getElementById('card-errors');
+	if (displayError) {
+		displayError.textContent = message || '';
 	}
 }
 
-card.on('change', function(event) {
-	var displayError = document.getElementById('card-errors');
-	if (event.error) {
-		displayError.textContent = event.error.message;
+function setSubmitting(isSubmitting) {
+	if (isSubmitting) {
+		$('#submit').prop('disabled', true).html(__('Processing...'));
 	} else {
-		displayError.textContent = '';
+		$('#submit').prop('disabled', false).html(__('Pay') + ' {{ amount }}');
 	}
-});
+}
 
-frappe.ready(function() {
-	$('#submit').off("click").on("click", function(e) {
-		e.preventDefault();
-		var extraDetails = {
-			name: $('input[name=cardholder-name]').val(),
-			email: $('input[name=cardholder-email]').val()
+function redirectAfter(result) {
+	setTimeout(function () {
+		if (result && result.redirect_to) {
+			window.location.href = result.redirect_to;
 		}
-		stripe.createToken(card, extraDetails).then(setOutcome);
-	})
+	}, 2000);
+}
+
+function mountPaymentElement() {
+	frappe.call({
+		method: "payments.templates.pages.stripe_checkout.create_payment_intent",
+		freeze: true,
+		headers: { "X-Requested-With": "XMLHttpRequest" },
+		args: {
+			data: checkoutData.data,
+			reference_doctype: checkoutData.reference_doctype,
+			reference_docname: checkoutData.reference_docname,
+			payment_gateway: checkoutData.payment_gateway
+		},
+		callback: function (r) {
+			if (!r.message || !r.message.client_secret) {
+				showError(__('Could not initialise the payment. Please try again.'));
+				return;
+			}
+			clientSecret = r.message.client_secret;
+			paymentIntentId = r.message.payment_intent;
+			elements = stripe.elements({ clientSecret: clientSecret });
+			paymentElement = elements.create('payment', {
+				defaultValues: {
+					billingDetails: {
+						name: {{ payer_name | tojson }},
+						email: {{ payer_email | tojson }}
+					}
+				}
+			});
+			paymentElement.mount('#card-element');
+		}
+	});
+}
+
+function confirmPayment() {
+	if (!elements || !clientSecret) {
+		showError(__('Payment is still initialising. Please wait a moment.'));
+		return;
+	}
+	setSubmitting(true);
+	recordConsentThen(doConfirm);
+}
+
+function recordConsentThen(next) {
+	// Record save-card consent before confirming, so cards store only on opt-in.
+	if (!$('#save-card').is(':checked') || !paymentIntentId) {
+		next();
+		return;
+	}
+	frappe.call({
+		method: "payments.templates.pages.stripe_checkout.set_card_consent",
+		headers: { "X-Requested-With": "XMLHttpRequest" },
+		args: {
+			payment_intent: paymentIntentId,
+			client_secret: clientSecret,
+			reference_doctype: checkoutData.reference_doctype,
+			reference_docname: checkoutData.reference_docname,
+			payment_gateway: checkoutData.payment_gateway
+		},
+		// Don't block payment if the consent write fails; the card just won't be saved.
+		always: function () { next(); }
+	});
+}
+
+function doConfirm() {
+	stripe.confirmPayment({
+		elements: elements,
+		redirect: 'if_required',
+		confirmParams: {
+			receipt_email: $('input[name=cardholder-email]').val()
+		}
+	}).then(function (result) {
+		if (result.error) {
+			showError(result.error.message);
+			$('.error').show();
+			setSubmitting(false);
+			return;
+		}
+
+		var intent = result.paymentIntent;
+		if (intent && (intent.status === 'succeeded' || intent.status === 'processing')) {
+			frappe.call({
+				method: "payments.templates.pages.stripe_checkout.make_payment",
+				freeze: true,
+				headers: { "X-Requested-With": "XMLHttpRequest" },
+				args: {
+					payment_intent: intent.id,
+					data: checkoutData.data,
+					reference_doctype: checkoutData.reference_doctype,
+					reference_docname: checkoutData.reference_docname,
+					payment_gateway: checkoutData.payment_gateway
+				},
+				callback: function (r) {
+					var msg = r.message || {};
+					$('#submit').hide();
+					if (msg.status === "Completed" || msg.status === "Pending") {
+						// Pending = async method (ACH/SEPA) accepted and still settling, not a failure.
+						$('.success').show();
+					} else {
+						$('.error').show();
+					}
+					redirectAfter(msg);
+				},
+				error: function () {
+					// Payment already captured; keep the button disabled to avoid a double-charge.
+					$('#submit').hide();
+					showError(__('Your payment was received and is being processed. Please do not pay again — if anything looks wrong, contact us.'));
+					$('.error').hide();
+				}
+			});
+		} else {
+			showError(__('The payment could not be completed.'));
+			setSubmitting(false);
+		}
+	});
+}
+
+frappe.ready(function () {
+	mountPaymentElement();
+	$('#submit').off("click").on("click", function (e) {
+		e.preventDefault();
+		confirmPayment();
+	});
 });
