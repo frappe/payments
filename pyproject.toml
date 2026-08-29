@@ -13,7 +13,7 @@ dependencies = [
     "stripe~=10.12.0",
     "braintree~=4.20.0",
     "pycryptodome>=3.18.0,<4.0.0",
-    "gocardless-pro~=1.22.0",
+    "gocardless-pro~=3.3.0",
     "setuptools==80.9.0",
 ]
 
