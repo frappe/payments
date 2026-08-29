@@ -20,9 +20,17 @@ def create_custom_pos_fields():
 				"read_only": 1,
 				"insert_after": "company",
 			},
+   	{
+			
+			"fieldname": "c2b_mpesa",
+			"label": "C2B Mpesa Payments",
+			"fieldtype": "Button",
+			"hidden": 1,
+				"insert_after": "request_for_payment",
+		},
 		]
 	}
-	if not frappe.get_meta("POS Invoice").has_field("request_for_payment"):
+	if not frappe.get_meta("POS Invoice").has_field("request_for_payment") or not frappe.get_meta("POS Invoice").has_field("c2b_mpesa"):
 		create_custom_fields(pos_field)
 
 	record_dict = [
@@ -45,6 +53,16 @@ def create_custom_pos_fields():
 			"parent": "POS Settings",
 			"parentfield": "invoice_fields",
 		},
+		{
+			"doctype": "POS Field",
+			"fieldname": "c2b_mpesa",
+			"label": "C2B Mpesa",
+			"fieldtype": "Button",
+			"parenttype": "POS Settings",
+			"parent": "POS Settings",
+			"parentfield": "invoice_fields",
+		},
+
 	]
 	create_pos_settings(record_dict)
 
