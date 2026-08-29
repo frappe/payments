@@ -190,6 +190,15 @@ class StripeSettings(Document):
 					)
 				)
 
+	def validate_minimum_transaction_amount(self, currency, amount):
+		if currency in self.currency_wise_minimum_charge_amount:
+			if flt(amount) < self.currency_wise_minimum_charge_amount.get(currency, 0.0):
+				frappe.throw(
+					_("For currency {0}, the minimum transaction amount should be {1}").format(
+						currency, self.currency_wise_minimum_charge_amount.get(currency, 0.0)
+					)
+				)
+
 	def get_payment_url(self, **kwargs):
 		return get_url(f"./stripe_checkout?{urlencode(kwargs)}")
 

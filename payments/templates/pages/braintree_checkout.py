@@ -12,6 +12,11 @@ from payments.payment_gateways.doctype.braintree_settings.braintree_settings imp
 	get_gateway_controller,
 )
 
+from payments.payment_gateways.doctype.braintree_settings.braintree_settings import (
+	get_client_token,
+	get_gateway_controller,
+)
+
 no_cache = 1
 
 expected_keys = (

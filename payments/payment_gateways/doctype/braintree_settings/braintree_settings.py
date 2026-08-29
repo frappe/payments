@@ -282,6 +282,7 @@ def get_gateway_controller(doc):
 	return frappe.db.get_value("Payment Gateway", payment_request.payment_gateway, "gateway_controller")
 
 
+
 def get_client_token(doc):
 	gateway_controller = get_gateway_controller(doc)
 	settings = frappe.get_doc("Braintree Settings", gateway_controller)

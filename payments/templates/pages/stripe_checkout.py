@@ -1,6 +1,8 @@
 # Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and Contributors
 # License: MIT. See LICENSE
 import json
+from frappe.integrations.doctype.stripe_settings.stripe_settings import get_gateway_controller
+from frappe.utils import cint, fmt_money
 
 import frappe
 from frappe import _
@@ -39,6 +41,18 @@ def get_context(context):
 		context.image = get_header_image(context.reference_docname, gateway_controller)
 
 		context["amount"] = fmt_money(amount=context["amount"], currency=context["currency"])
+		# query for sales invoice PO number
+		payment_request = frappe.get_doc(
+			context.reference_doctype, context.reference_docname)
+		if payment_request and payment_request.reference_doctype == "Sales Invoice":
+			# Fetch the PO number related to the Sales Invoice (if any)
+			po_number = frappe.db.get_value(
+				payment_request.reference_doctype,
+				payment_request.reference_name,
+				"po_no"
+			)
+			if po_number:
+				context["po_number"] = po_number  # Add PO number to context
 
 		if is_a_subscription(context.reference_doctype, context.reference_docname):
 			payment_plan = frappe.db.get_value(
@@ -49,6 +63,10 @@ def get_context(context):
 			context["amount"] = context["amount"] + " " + _(recurrence)
 
 	else:
+		frappe.log_error(
+			"Missing keys in form_dict",
+			"Expected keys: {}," "Received keys: {}".format(expected_keys, list(frappe.form_dict)),
+		)
 		frappe.redirect_to_message(
 			_("Some information is missing"),
 			_("Looks like someone sent you to an incomplete URL. Please ask them to look into it."),
@@ -69,8 +87,11 @@ def get_header_image(doc, gateway_controller):
 	return frappe.db.get_value("Stripe Settings", gateway_controller, "header_img")
 
 
+
 @frappe.whitelist(allow_guest=True)
-def make_payment(stripe_token_id, data, reference_doctype=None, reference_docname=None, payment_gateway=None):
+def make_payment(
+	stripe_token_id, data, reference_doctype=None, reference_docname=None, payment_gateway=None
+):
 	data = json.loads(data)
 
 	data.update({"stripe_token_id": stripe_token_id})

@@ -1,0 +1,17 @@
+include MANIFEST.in
+include *.json
+include *.md
+include *.py
+include *.txt
+recursive-include payments *.css
+recursive-include payments *.csv
+recursive-include payments *.html
+recursive-include payments *.ico
+recursive-include payments *.js
+recursive-include payments *.json
+recursive-include payments *.md
+recursive-include payments *.png
+recursive-include payments *.py
+recursive-include payments *.svg
+recursive-include payments *.txt
+recursive-exclude payments *.pyc
