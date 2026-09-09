@@ -11,7 +11,7 @@ from frappe.model.document import Document
 from frappe.query_builder import Interval
 from frappe.query_builder.functions import Now
 
-from payments.types import GatewayProcessingResponse, RemoteServerInitiationPayload, TxData
+from payments.types import GatewayProcessingResponse, GatewayRef, RemoteServerInitiationPayload, TxData
 
 if TYPE_CHECKING:
 	from payments.controllers import PaymentController
@@ -123,9 +123,8 @@ class PaymentSessionLog(Document):
 		if not self.gateway:
 			self.log_error("No gateway selected yet")
 			frappe.throw(_("No gateway selected for this payment session"))
-		d = json.loads(self.gateway)
-		doctype, docname = d["gateway_settings"], d["gateway_controller"]
-		return frappe.get_cached_doc(doctype, docname)
+		ref = GatewayRef.from_json(self.gateway)
+		return frappe.get_cached_doc(ref.gateway_settings, ref.gateway_controller)
 
 	def get_button(self) -> "PaymentButton":
 		if not self.button:
@@ -215,12 +214,7 @@ def select_button(pslName: str | None = None, buttonName: str | None = None) -> 
 	psl.db_set(
 		{
 			"button": buttonName,
-			"gateway": json.dumps(
-				{
-					"gateway_settings": btn.gateway_settings,
-					"gateway_controller": btn.gateway_controller,
-				}
-			),
+			"gateway": GatewayRef(btn.gateway_settings, btn.gateway_controller).to_json(),
 		}
 	)
 	# once state set: reload the page to activate widget
@@ -238,12 +232,7 @@ def create_log(
 	log.tx_data = frappe.as_json(tx_data_dict)
 	log.status = status
 	if controller:
-		log.gateway = json.dumps(
-			{
-				"gateway_settings": controller.doctype,
-				"gateway_controller": controller.name,
-			}
-		)
+		log.gateway = GatewayRef(controller.doctype, controller.name).to_json()
 
 	log.insert(ignore_permissions=True)
 	return log

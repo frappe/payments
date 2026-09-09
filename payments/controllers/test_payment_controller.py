@@ -7,6 +7,9 @@ from frappe.tests import IntegrationTestCase
 
 from payments.controllers import PaymentController
 from payments.exceptions import PaymentControllerProcessingError, RefDocHookProcessingError
+from payments.payment_gateways.doctype.payment_demo_settings.payment_demo_settings import (
+	PaymentDemoSettings,
+)
 from payments.payments.doctype.payment_session_log.payment_session_log import PaymentSessionLog
 from payments.types import GatewayProcessingResponse, TxData
 
@@ -72,6 +75,16 @@ class TestPSLContracts(unittest.TestCase):
 	def test_update_gateway_specific_state_is_callable(self):
 		self.assertTrue(hasattr(PaymentSessionLog, "update_gateway_specific_state"))
 		self.assertTrue(callable(PaymentSessionLog.update_gateway_specific_state))
+
+
+class TestGatewayRef(unittest.TestCase):
+	def test_roundtrip(self):
+		from payments.types import GatewayRef
+
+		ref = GatewayRef(gateway_settings="Stripe Settings", gateway_controller="acme")
+		restored = GatewayRef.from_json(ref.to_json())
+		self.assertEqual(restored.gateway_settings, "Stripe Settings")
+		self.assertEqual(restored.gateway_controller, "acme")
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +196,39 @@ class TestPaymentControllerLifecycle(IntegrationTestCase):
 		with patch.object(ref_doc_class, "on_payment_charge_processed", create=True, new=exploding_hook):
 			PaymentController.process_response(psl_name, response)
 		self.assertEqual(frappe.get_doc("Payment Session Log", psl_name).status, "Error - RefDoc")
+
+	# -- process_response: error shape --
+
+	def test_process_response_processing_error_shape(self):
+		tx_data = _make_tx_data()
+		_controller, psl_name = PaymentController.initiate(tx_data, self.gateway_name)
+		PaymentController.proceed(psl_name)
+		response = GatewayProcessingResponse(hash=None, message=None, payload={"status": "succeeded"})
+		# Force a processing error by making the charge processor raise
+		with patch.object(
+			PaymentDemoSettings, "_process_response_for_charge", side_effect=ValueError("boom")
+		):
+			result = PaymentController.process_response(psl_name, response)
+		self.assertEqual(result.indicator_color, "red")
+		self.assertEqual(result.status_changed_to, frappe._("Server Error"))
+		self.assertEqual(result.payload, {})
+		self.assertIsInstance(result.action, dict)
+
+	# -- proceed: error paths --
+
+	def test_proceed_redirects_on_initiation_failure(self):
+		from payments.exceptions import FailedToInitiateFlowError
+
+		tx_data = _make_tx_data()
+		_controller, psl_name = PaymentController.initiate(tx_data, self.gateway_name)
+		with patch.object(
+			PaymentDemoSettings,
+			"_initiate_charge",
+			side_effect=FailedToInitiateFlowError("nope", {"err": 1}),
+		):
+			with self.assertRaises(frappe.Redirect):
+				PaymentController.proceed(psl_name)
+		self.assertEqual(frappe.get_doc("Payment Session Log", psl_name).status, "Error")
 
 	# -- pre_data_capture_hook --
 

@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 from enum import Enum
 
 
@@ -185,3 +186,22 @@ class PaymentUrl(str):
 
 	It is rendered from the integration log reference and the URL of the current site.
 	"""
+
+
+@dataclass
+class GatewayRef:
+	"""Identifies the concrete gateway settings doctype + controller record.
+
+	Stored as JSON on Payment Session Log (and the gateway filter), kept as a
+	dataclass so the field names live in exactly one place.
+	"""
+
+	gateway_settings: str
+	gateway_controller: str
+
+	def to_json(self) -> str:
+		return json.dumps(asdict(self))
+
+	@staticmethod
+	def from_json(s: str) -> "GatewayRef":
+		return GatewayRef(**json.loads(s))

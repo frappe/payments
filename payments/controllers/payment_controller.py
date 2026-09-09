@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, NoReturn
 from urllib.parse import quote, urlencode
 
 import frappe
@@ -50,10 +50,27 @@ def _error_value(error, flow):
 	).format(flow, error)
 
 
+def _redirect_on_initiation_error(psl, error, *, include_psl: bool = False) -> NoReturn:
+	"""Redirect the user to a generic payment-gateway error message and raise.
+
+	``psl`` is only interpolated into the message when ``include_psl`` is True.
+	Always raises ``frappe.Redirect`` — callers never resume after this.
+	"""
+	if include_psl:
+		body = _("Please contact customer care mentioning: {0} and {1}").format(psl, error)
+	else:
+		body = _("Please contact customer care mentioning: {0}").format(error)
+	frappe.redirect_to_message(
+		_("Payment Gateway Error"),
+		body,
+		http_status_code=401,
+		indicator_color="yellow",
+	)
+	raise frappe.Redirect
+
+
 class PaymentController(Document):
 	"""This controller implements the public API of payment gateway controllers."""
-
-	from typing import TYPE_CHECKING
 
 	if TYPE_CHECKING:
 		frontend_defaults: FrontendDefaults
@@ -257,36 +274,18 @@ class PaymentController(Document):
 		except FailedToInitiateFlowError as err:
 			psl.set_initiation_payload(err.data, "Error")
 			error = psl.log_error(title=err.message)
-			frappe.redirect_to_message(
-				_("Payment Gateway Error"),
-				_("Please contact customer care mentioning: {0} and {1}").format(psl, error),
-				http_status_code=401,
-				indicator_color="yellow",
-			)
-			raise frappe.Redirect
+			_redirect_on_initiation_error(psl, error, include_psl=True)
 
 		# ... yet others do ...
 		except HTTPError:
 			data = frappe.flags.integration_request.json()
 			psl.set_initiation_payload(data, "Error")
 			error = frappe.get_last_doc("Error Log")
-			frappe.redirect_to_message(
-				_("Payment Gateway Error"),
-				_("Please contact customer care mentioning: {0} and {1}").format(psl, error),
-				http_status_code=401,
-				indicator_color="yellow",
-			)
-			raise frappe.Redirect
+			_redirect_on_initiation_error(psl, error, include_psl=True)
 
 		except Exception:
 			error = psl.log_error(title="Unknown Initialization Failure")
-			frappe.redirect_to_message(
-				_("Payment Gateway Error"),
-				_("Please contact customer care mentioning: {0}").format(error),
-				http_status_code=401,
-				indicator_color="yellow",
-			)
-			raise frappe.Redirect
+			_redirect_on_initiation_error(psl, error)
 
 	def _get_support_email(self):
 		"""Look up the support email for the reference document, falling back to default incoming."""
@@ -311,6 +310,21 @@ class PaymentController(Document):
 			return dict(href=href, label=_("Email Us"))
 		return fallback_action
 
+	def _build_compensatory_action(self, psl, error_log):
+		return self._build_support_action(
+			psl,
+			subject=_("Payment Server Error: {}").format(error_log),
+			# nosemgrep: frappe-translation-python-splitting - newlines in email body are intentional
+			body=_("Reference:\n\n- PSL: {}\n- Error Log: {}\n- RefDoc: {}\n\nThank you!").format(
+				frappe.utils.get_url_to_form("Payment Session Log", psl.name),
+				frappe.utils.get_url_to_form("Error Log", error_log.name),
+				frappe.utils.get_url_to_form(
+					self.state.tx_data.reference_doctype, self.state.tx_data.reference_docname
+				),
+			),
+			fallback_action=dict(href="/", label=_("Go to Homepage")),
+		)
+
 	# Status category → (psl_status, indicator_color, message_template, action_label)
 	# Note: action labels are raw strings; wrapped in _() at render time to support i18n.
 	# Translation markers for extraction: _("Go to Homepage"), _("Refresh")
@@ -326,9 +340,7 @@ class PaymentController(Document):
 		),
 	}
 
-	def _process_response(
-		self, psl: PaymentSessionLog, response: GatewayProcessingResponse, ref_doc: Document
-	) -> Processed:
+	def _process_response(self, psl: PaymentSessionLog, ref_doc: Document) -> Processed:
 		self._validate_response()
 
 		processed = None
@@ -354,7 +366,7 @@ class PaymentController(Document):
 
 		ret = {
 			"status_changed_to": self.flags.status_changed_to,
-			"payload": response.payload,
+			"payload": self.state.response.payload,
 		}
 
 		changed = False
@@ -364,7 +376,7 @@ class PaymentController(Document):
 			if self.flags.status_changed_to in getattr(self.flowstates, category):
 				changed = psl_status != psl.status
 				psl.db_set("decline_reason", None)
-				psl.set_processing_payload(response, psl_status)  # commits
+				psl.set_processing_payload(self.state.response, psl_status)  # commits
 				ret["indicator_color"] = color
 				processed = processed or Processed(
 					message=_(msg_template).format("charge".title()),
@@ -382,7 +394,7 @@ class PaymentController(Document):
 					"button": None,  # reset the button for another chance
 				}
 			)
-			psl.set_processing_payload(response, "Declined")  # commits
+			psl.set_processing_payload(self.state.response, "Declined")  # commits
 			ret["indicator_color"] = "red"
 
 			action = self._build_support_action(
@@ -482,23 +494,17 @@ class PaymentController(Document):
 
 		mute = self._is_server_to_server()
 
-		def get_compensatory_action(error_log):
-			return self._build_support_action(
-				psl,
-				subject=_("Payment Server Error: {}").format(error_log),
-				# nosemgrep: frappe-translation-python-splitting - newlines in email body are intentional
-				body=_("Reference:\n\n- PSL: {}\n- Error Log: {}\n- RefDoc: {}\n\nThank you!").format(
-					frappe.utils.get_url_to_form("Payment Session Log", psl.name),
-					frappe.utils.get_url_to_form("Error Log", error_log.name),
-					frappe.utils.get_url_to_form(
-						self.state.tx_data.reference_doctype, self.state.tx_data.reference_docname
-					),
-				),
-				fallback_action=dict(href="/", label=_("Go to Homepage")),
+		def make_error_processed(error, message):
+			return Processed(
+				message=message,
+				action=self._build_compensatory_action(psl, error),
+				status_changed_to=_("Server Error"),
+				indicator_color="red",
+				payload={},
 			)
 
 		try:
-			processed = self._process_response(psl, response, ref_doc)
+			processed = self._process_response(psl, ref_doc)
 			if self.flags.status_changed_to in self.flowstates.declined:
 				try:
 					msg = self._render_failure_message()
@@ -512,37 +518,19 @@ class PaymentController(Document):
 		except PayloadIntegrityError:
 			error = psl.log_error("Response validation failure")
 			if not mute:
-				return Processed(
-					message=_("There's been an issue with your payment."),
-					action=get_compensatory_action(error),
-					status_changed_to=_("Server Error"),
-					indicator_color="red",
-					payload={},
-				)
+				return make_error_processed(error, _("There's been an issue with your payment."))
 
 		except PaymentControllerProcessingError as e:
 			error = psl.log_error(f"Processing error ({e.psltype})")
 			psl.set_processing_payload(response, "Error")
 			if not mute:
-				return Processed(
-					message=_error_value(error, e.psltype),
-					action=get_compensatory_action(error),
-					status_changed_to=_("Server Error"),
-					indicator_color="red",
-					payload={},
-				)
+				return make_error_processed(error, _error_value(error, e.psltype))
 
 		except RefDocHookProcessingError as e:
 			error = psl.log_error(f"Processing failure ({e.psltype} - refdoc hook)", e.__cause__)
 			psl.set_processing_payload(response, "Error - RefDoc")
 			if not mute:
-				return Processed(
-					message=_error_value(error, f"{e.psltype} (via ref doc hook)"),
-					action=get_compensatory_action(error),
-					status_changed_to=_("Server Error"),
-					indicator_color="red",
-					payload={},
-				)
+				return make_error_processed(error, _error_value(error, f"{e.psltype} (via ref doc hook)"))
 		else:
 			return processed
 		finally:
