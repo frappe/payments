@@ -162,8 +162,8 @@ def verify_payment():
     if not tx_ref:
         frappe.throw(_("Missing tx_ref"))
 
-    settings = frappe.get_single("Chapa Settings")
-
+    settings = frappe.get_doc("Chapa Settings", "Chapa Settings")
+    
     headers = {
         "Authorization": f"Bearer {settings.get_password('secret_key')}"
     }
