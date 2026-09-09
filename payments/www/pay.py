@@ -1,4 +1,3 @@
-import json
 from typing import TYPE_CHECKING
 
 import frappe
@@ -62,47 +61,91 @@ def get_context(context):
 	if not psl.is_terminal():
 		# First Pass: chose payment button
 		# gateway was preselected; e.g. on the backend
+		# One fail-closed parser, shared with select_button and get_controller. A
+		# bare json.loads here raised JSONDecodeError on a corrupt restriction and
+		# served the payer a 500; None means unreadable, and the only safe reading
+		# of an unreadable restriction is that no method is available.
+		restriction = psl.gateway_filter()
 		filters = {"enabled": True}
-		if psl.gateway:
-			filters.update(json.loads(psl.gateway))
-
-		buttons = frappe.get_list(
-			"Payment Button",
-			fields=["name", "icon", "label"],
-			filters=filters,
-		)
+		if restriction is None:
+			buttons = []
+		else:
+			filters.update(restriction)
+			# get_all, not get_list: the payer is authorised by holding the session
+			# capability URL, not by a role, so Payment Button deliberately grants
+			# Guest no read permission — which would otherwise let anyone enumerate
+			# every gateway's templates and extra_payload over the REST API.
+			buttons = frappe.get_all(
+				"Payment Button",
+				fields=["name", "icon", "label"],
+				filters=filters,
+			)
 
 		# Use already-fetched buttons instead of re-querying
 		context.payment_buttons = [
 			(load_icon(entry.get("icon")), entry.get("name"), entry.get("label")) for entry in buttons
 		]
-		context.render_buttons = True
+		# Only offer the chooser if there is something to choose. Setting this
+		# unconditionally made pay.html dereference payment_buttons[0] on a session
+		# whose gateway filter matches no enabled button — the post-install state,
+		# since nothing ships a Payment Button — and 500 the payer's checkout page.
+		context.render_buttons = bool(buttons)
 
-		if not psl.button:
+		# A selection only counts while its button is still enabled. select_button
+		# refuses a disabled button, but nothing re-checked it for a session that
+		# was already past the chooser — so this page went on to call proceed() and
+		# initiate a REAL gateway charge with a disabled button. An operator
+		# disabling a misconfigured or compromised gateway expects that to stop, so
+		# treat the selection as withdrawn and leave the payer the other methods.
+		selected = psl.get_button() if psl.button else None
+		if selected is not None and not selected.enabled:
+			selected = None
+
+		if selected is None:
 			context.render_widget = False
 			context.render_capture = False
+			# Nothing selected (or the selection was withdrawn) and maybe nothing
+			# left to select.
+			context.no_payment_method = not buttons
 
 		# Second Pass (Data Capture): capture additonal data if the button requires it
-		elif psl.get_button().requires_data_capture:
+		elif selected.requires_data_capture:
 			context.render_widget = False
 			context.render_capture = True
+			# The capture form IS the payment method, and pay.html renders it, so
+			# never deny one here. Deriving this from `not buttons` showed a payer a
+			# working capture form with "No payment method is available" underneath
+			# it — the same contradiction as on the widget branch below. Losing the
+			# last enabled button costs the chooser, not the method.
+			context.no_payment_method = False
 
-			proceeded: Proceeded = PaymentController.pre_data_capture_hook(psl.name)
+			# The hook exists so a gateway can fetch data the capture form needs, and it
+			# persists that data on the PSL. `state` above predates the hook, so re-read
+			# it afterwards; rendering the pre-hook snapshot drops whatever was fetched,
+			# and does so silently because the form still renders.
+			PaymentController.pre_data_capture_hook(psl.name)
+			psl.reload()
+			capture_state = psl.load_state()
+
 			# Display
-			button: PaymentButton = psl.get_button()
-			context.data_capture = button.get_data_capture_assets(state)
+			button: PaymentButton = selected
+			context.data_capture = button.get_data_capture_assets(capture_state)
 			context.button_name = psl.button
 
 		# Second Pass (Third Party Widget): let the third party widget manage data capture and flow
 		else:
 			context.render_widget = True
 			context.render_capture = False
+			# The widget IS the payment method: denying one here rendered a live,
+			# working gateway widget with "No payment method is available"
+			# underneath it.
+			context.no_payment_method = False
 
 			proceeded: Proceeded = PaymentController.proceed(psl.name)
 
 			# Display
 			payload: RemoteServerInitiationPayload = proceeded.payload
-			button: PaymentButton = psl.get_button()
+			button: PaymentButton = selected
 			css, js, wrapper = button.get_widget_assets(payload)
 			context.gateway_css = css
 			context.gateway_js = js
@@ -113,5 +156,7 @@ def get_context(context):
 		context.render_widget = False
 		context.render_buttons = False
 		context.render_capture = False
+		# The session is over; there is nothing to offer and nothing missing.
+		context.no_payment_method = False
 		context.status = psl.status
 		context.indicator_color = psl.get_indicator_color()

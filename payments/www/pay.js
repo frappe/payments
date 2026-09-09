@@ -26,9 +26,15 @@ frappe.ready(function () {
           pslName: pslName,
           buttonName: buttonData,
         },
-        error_msg: "#select-button-errors",
+        // No error_msg option here: frappe.call has no such option (grep the
+        // frappe JS bundle), so it silently did nothing. Every refusal branch of
+        // select_button returns None and puts its reason in message_log, which
+        // frappe already renders as a msgprint for the payer.
         callback: (r) => {
-          if (r.message.reload) {
+          // r.message is undefined on every refusal branch, and this used to
+          // dereference it — throwing a TypeError in the payer's browser instead
+          // of showing them the reason.
+          if (r.message && r.message.reload) {
             window.location.reload();
           }
         },

@@ -5,6 +5,11 @@
 > PaymentController v2: what we kept, what we trimmed, and where we deliberately
 > diverged. Differences from the ancestor design are called out inline as
 > **[Divergence]**.
+>
+> **Scope rule for this document:** everything outside the
+> "[Designed but not in this PR](#designed-but-not-in-this-pr)" section describes
+> code that exists on this branch. If you find a claim here that no symbol backs,
+> it is a bug in this file — please fix it rather than implementing to match.
 
 The Payments app provides an abstract _PaymentController_ and specific
 implementations for a growing number of gateways. These implementations live in
@@ -17,7 +22,9 @@ Gateway_ to implement its payment flow.
 
 On installation the app adds custom fields to the Web Form (for web-form-based
 payments) and a _Payment Session Log_ reference on _Payment Request_, and
-removes them on uninstallation.
+removes them on uninstallation. The Payment Request reference is created by its
+own idempotent function and also by a patch, because `after_install` alone never
+reaches a site that already has the app.
 
 ## Relation between RefDoc and Payment Gateway Controller
 
@@ -36,8 +43,10 @@ interaction with remote systems.
 ### TXData, TX Reference and Correlation ID
 
 Data is passed from the RefDoc to the controller via a standardized structure,
-_TXData_ (`payments/types.py`). All lifecycle state is then stored on a _Payment
-Session Log_.
+_TXData_ (`payments/types.py`), whose fields are `amount`, `currency`,
+`reference_doctype`, `reference_docname`, `payer_contact`, `payer_address`,
+`loyalty_points` and `discount_amount`. All lifecycle state is then stored on a
+_Payment Session Log_.
 
 The **name** of the PSL is the system's unique transaction reference, passed
 around between server, client, and remote systems. Gateways should stash it in
@@ -50,59 +59,171 @@ A gateway's _Correlation ID_, when available, is stored as the PSL's
 name), implementations recover the PSL by filtering on
 `{"correlation_id": correlation_id}`.
 
+> **Security note on the PSL name.** It doubles as the capability token for
+> `/pay`, and it is *not* 10 random characters. Frappe's default hash naming is
+> `_get_timestamp_prefix() + _generate_random_string(7)` truncated to 10, where
+> the prefix is a function of creation time, so the secret is roughly **30–35
+> bits** of base32. A guessed link discloses the payer's name, the amount and
+> currency, and the reference document. There is no rate limit on the page. A
+> dedicated high-entropy token field is the right fix and is not implemented.
+
 **[Divergence] Security & concurrency hardening.** Our controller adds guards
 the ancestor design only gestured at:
 
 - **Tamper whitelist:** at `proceed()`, only `UPDATABLE_TX_DATA_FIELDS`
   (`payer_contact`, `payer_address`, `loyalty_points`, `discount_amount`) may be
-  updated from the guest-facing endpoint; critical fields (amount, currency,
-  reference doc, `save_mandate`) cannot be changed. Rejected keys are logged.
-- **Processing lock + terminal-state guard:** `process_response` takes a
-  document lock and re-checks `is_terminal()` after acquiring it, so a webhook
-  and a client confirm racing on the same PSL cannot double-process.
-- **Fail-fast construction:** `PaymentController.__new__` requires every
-  concrete controller to declare `flowstates` and `frontend_defaults`.
+  updated from a caller-supplied `updated_tx_data`; critical fields (amount,
+  currency, reference doc) cannot be changed. Rejected keys are recorded with
+  `frappe.log_error`, so an attempted tamper leaves an Error Log row.
+- **PII minimisation:** `payer_contact` and `payer_address` are projected onto
+  documented allowlists at the PSL boundary (`_minimize_payer_pii`), so both
+  `create_log` and `update_tx_data` are covered — the latter matters because
+  those two fields are guest-updatable. **The allowlist has to track its
+  producer:** a contact-document producer supplies `first_name`/`last_name` and
+  no `full_name`, and omitting those parts made `/pay` render "Customer: None"
+  for every session from such an initiator, so both are accepted and `full_name`
+  is derived when absent. `email` is deliberately *not* accepted — nothing reads
+  `payer_contact["email"]`, and a minimisation allowlist should not keep a second
+  copy of the payer's address in a blob a guest page renders. Scope note: the
+  ERPNext-side producer this anticipates is **prospective**. There is no
+  `_get_contact_fields` in ERPNext v16.30.0 (zero occurrences of it, or of
+  `payer_contact`, outside this repo); ERPNext calls
+  `controller.get_payment_url(payer_name=..., payer_email=...)`, the v1 shape.
+- **Serialised initiation:** `proceed()` runs its guard and the gateway call
+  under `frappe.utils.synchronization.filelock`, keyed on the session, so two
+  concurrent callers cannot both initiate a charge.
+- **Frontend-safe gateway context:** guest templates receive only
+  `PaymentController.get_frontend_safe_context()`, an explicit per-gateway
+  allowlist, never the raw gateway settings document (which holds secrets).
+- **Fail-fast construction:** `PaymentController.__init_subclass__` requires
+  every concrete controller to declare `flowstates` and `frontend_defaults`, at
+  class-definition time.
+
+## Payment Session Log state
+
+`status` records **what the gateway did**, and nothing else. Values written by
+this branch: `Created`, `Started`, `Initiated`, `Data Capture`, `Paid`,
+`Authorized`, `Processing`, `Declined`, `Error`. (`Cancelled` is defined in the
+maps below but no code on this branch writes it to a PSL — it is reserved, which
+also means `SETTLED_STATES` is effectively `{"Paid"}` today.)
+
+Two gateway fields, likewise separated because they answer different questions:
+`gateway` is the **initiator's restriction** (which gateway this session must
+use, or blank for none) and is never narrowed afterwards; `selected_gateway` is
+the **payer's choice**, written by `select_button`. `get_controller()` prefers
+the selection and falls back to the restriction. Writing the selection into
+`gateway` turned an unrestricted session into one pinned to whatever the payer
+first clicked — so "or change payment method" could only offer that same button,
+and a retry after a decline would have been pinned to the gateway that declined
+it.
+
+> **Not reachable from `/pay` today.** `Declined` is display-terminal, so the
+> page shows a result and no chooser, and `select_button` refuses a terminal
+> session. A retry is therefore only reachable server-side (a fresh `proceed()`
+> from the reference document), which is what `may_retry_charge()` and the
+> declined path's `button = None` reset serve. Letting a declined payer choose
+> another method on the page needs a fifth predicate — "should the page still
+> offer the flow?" — distinct from `is_terminal()`; deliberately not added here.
+
+`reconciliation` (`Pending` / `Done` / `Failed`, blank when not applicable)
+records **what we did about it** — whether the RefDoc hook that performs local
+bookkeeping succeeded — with `reconciliation_error` linking the Error Log.
+
+Keeping these apart is load-bearing. Folding a reconciliation failure into
+`status` (as an `Error - RefDoc` value) overwrote `Paid`, destroying the only
+record that the money had moved.
+
+Four sets answer four **independent** questions. They deliberately differ, and
+collapsing any two of them has produced a defect three times now:
+
+| Predicate | Question | Every consumer |
+|---|---|---|
+| `is_terminal()` / `TERMINAL_STATES` | Should `/pay` stop showing the flow and show a result? Also the indicator-colour map. | **four**: `get_context` in `pay.py`, `select_button`, and *both* error handlers in `process_response` (the inner catch-all and the outer one), which use it to avoid overwriting a recorded gateway outcome — a fifth question it answers only because every terminal state happens to be a gateway outcome |
+| `is_settled()` / `SETTLED_STATES` | Can no gateway callback change this outcome again? | the re-check after taking the lock in `process_response` |
+| `is_disposable()` / `DISPOSABLE_STATES` ∪ `ABANDONED_STATES` | May the log be deleted past the retention window? Either the gateway answered, or the session never reached one (`Created`). Requires `reconciliation` to be neither `Failed` nor `Pending`. | **none in production.** `clear_old_logs` re-expresses the condition in SQL and never calls the predicate, so the two are twins that must change together — a test asserts they agree across every status × reconciliation pair |
+| `may_retry_charge()` / `RETRYABLE_STATES` | May a **new charge** be started for this session? | `_run_initiation`'s idempotency guard |
+
+**List every consumer in this table when you add a predicate, count them, and
+do NOT cite line numbers** — they rot on the next edit and a stale one reads as
+authority. This has now failed three times. The first version named only
+`pay.py` and `select_button` for `is_terminal()`, omitting the money path —
+which was then written against `is_terminal()`, so a `Paid` session re-charged.
+The second said "three consumers" and named one of the two `process_response`
+handlers. The third had the count right and every line number wrong: all three
+pointed at comments rather than call sites. A table that is the device against
+incompleteness is worth nothing when it is itself unreliable.
+
+Consequences worth knowing:
+
+- `Processing` and `Authorized` are terminal for the page but **not** settled and
+  **not** disposable — the gateway still owes an answer, so a later callback is
+  accepted and the log is retained.
+- `Declined` and `Error` are **not** settled (a late settlement or a webhook
+  retry is accepted) but **are** disposable, so declined sessions do not
+  accumulate forever. Retention being a separate question is what lets both hold
+  at once.
+- A captured payment whose reconciliation failed is never disposable, however
+  old — that is exactly the audit trail to keep. Note what this does and does
+  not give you: the record is **preserved and discoverable** (the list view
+  shows it as "Paid · unreconciled" and filters to `reconciliation=Failed`), but
+  it is **not automatically re-driven**. `Paid` is settled, so later callbacks
+  short-circuit, and there is no retry action yet. Recovery is manual.
+
+`clear_old_logs` expresses `is_disposable()` in SQL; the two must be kept in
+step. It is wired through frappe's log retention rather than `scheduler_events`:
+`payments/hooks.py` registers `default_log_clearing_doctypes = {"Payment Session
+Log": 90}`, and Log Settings then calls this doctype's own `clear_old_logs(days=…)`
+— so our disposability rule is what runs, and the window is configurable per
+site through Log Settings.
+
+### Two payload columns, deliberately not shared
+
+- `initiation_response_payload` — the gateway's response to our initiation. This
+  is what `proceed()` treats as its **idempotency token**.
+- `data_capture_payload` — scratch state fetched by `_pre_data_capture_hook` for
+  the capture form.
+
+They look alike and were briefly written through one shared setter. That
+destroyed the idempotency token and let a page reload charge the payer twice, so
+each writer now does its own write and says why they are separate.
 
 ## Flow variants
 
-Our controller models these flows:
+This branch implements one flow:
 
-- **Charge** — a single payment.
-- **Mandated Charge** — an off-session payment that requires little or no user
-  interaction thanks to a previously stored mandate.
-- **Mandate Acquisition** — acquire a mandate for future mandated charges.
-  **[Divergence] Reserved but not yet implemented.** It is kept first-class in
-  the type model (`SessionType.mandate_acquisition`) so mandate-first gateways
-  are not boxed out, but no gateway implements it today.
+- **Charge** — a single payment. `SessionType` has exactly one member,
+  `charge`.
 
-A _mandate_ represents a pre-authorization to charge a payer off-session
-(subscription, SEPA mandate, pre-authorized "hotel booking", tokenized
-"one-click"). Concrete mandates subclass `PaymentMandate`
-(`payments/controllers/payment_mandate.py`), which declares `is_usable()` and
-`revoke()`; gateway-specific identifiers live on the subclass.
+Mandated charges and mandate acquisition are designed but not present; see
+[below](#designed-but-not-in-this-pr).
 
-### How a mandate is born — two paths
+### What `/pay` renders, and the flag that says so
 
-A mandate becomes _usable_ in one of two ways. Only the first is implemented
-now:
+Four independent things can be true of a non-terminal session, and `pay.py`
+states each in its own branch rather than letting `pay.html` derive one from the
+negation of the others. Deriving it is what produced two defects in a row: a
+payer who had just paid was told no payment method was available, and a payer
+with a working gateway widget on screen was told the same.
 
-| Path | When the mandate becomes usable | Gateways | Flow type |
-|------|---------------------------------|----------|-----------|
-| **First charge saves the mandate** | on first-charge **success** | Stripe (`setup_future_usage=off_session`), Mollie (`sequenceType: first` → mandate `valid` once the first payment succeeds) | `charge` + `TxData.save_mandate` |
-| **Direct mandate** | at creation, with **no** charge | GoCardless (mandate-first), Mollie Mandates API (signed SEPA) | `mandate_acquisition` (reserved) |
+| context flag | set when | renders |
+|---|---|---|
+| `render_buttons` | at least one enabled button matches the session's gateway filter | the chooser |
+| `render_widget` | a Third-Party-Widget button is selected | the gateway's own widget |
+| `render_capture` | a Data Capture button is selected | that button's capture form |
+| `no_payment_method` | nothing is selected *or* only a capture form is possible, **and** no enabled button matches | "No payment method is available" |
 
-**[Divergence] Acquisition-as-side-effect, primary path.** The ancestor design
-treats mandate acquisition as a first-class, user-interactive step (often a
-pre-step of a mandated charge). We instead make the primary acquisition a
-**side effect of the first charge**: `save_mandate` signals the charge to
-persist/activate a reusable mandate on success. We keep `mandate_acquisition`
-reserved for the direct-mandate path rather than implementing it speculatively.
+`no_payment_method` is `False` on the widget branch — the widget *is* a payment
+method — and on the capture branch, whose form is likewise the method. It is
+`False` on every terminal session, where the result is all that renders.
 
-> The transient gateway "pending mandate" (e.g. Mollie creates a `pending`
-> mandate the moment a `first` payment starts, valid only after it succeeds) is
-> a gateway internal. The framework only persists/links a `PaymentMandate` when
-> it becomes usable — i.e. on first-charge success — which is identical for
-> Stripe and Mollie.
+**A selection only counts while its button is still enabled.** `select_button`
+refuses a disabled button, but nothing re-checked it for a session already past
+the chooser, so `/pay` went on to call `proceed()` and initiate a real gateway
+charge through a disabled button. Disabling one is an operator's kill switch —
+for a misconfigured or compromised gateway — so a disabled selection is treated
+as withdrawn: the payer gets the chooser back if any other button is enabled,
+and the denial if none is. That is a different state from "no *other* button is
+enabled", where the payer's own selection still works.
 
 ### Out of scope (deliberate)
 
@@ -122,15 +243,24 @@ PSP-mediated flows where there is a real API and a response to process.
    takes over the user flow; if `False`, the RefDoc business logic drives the
    next steps.
 3. If not delegated: initiate/continue the user flow (email, SMS, link, etc.).
+   `/pay` offers the chooser only when an enabled button actually matches the
+   session; with none it says so rather than rendering an empty chooser, which
+   used to dereference `payment_buttons[0]` and 500 the payer's page — the
+   post-install state, since nothing ships a Payment Button.
 4. Post-process status changes via the optional RefDoc hook
-   `on_payment_<flow>_processed(changed, state, flags, flowstates)` — where
-   `<flow>` is `charge` or `mandated_charge` — with two goals:
+   `on_payment_charge_processed(changed, state, flags, flowstates)`, with two
+   goals:
    - continue business logic in the backend;
    - optionally return `{"message": _("..."), "action": {"href": "...",
      "label": _("...")}}` to the controller (`message` shown to the user;
      `action` rendered as the call-to-action). If nothing is returned, the
      gateway's or app's default is used.
+
    On decline, `on_payment_failed(message)` is also invoked if present.
+
+   If this hook raises, the gateway outcome in `status` is preserved and the
+   failure is recorded in `reconciliation` — see
+   [Payment Session Log state](#payment-session-log-state).
 
 > **[Divergence] Hook signature.** The ancestor sketch used
 > `on_payment_*_processed(flags, state)`; ours passes
@@ -146,65 +276,85 @@ and keep customer choices open until the last moment.
    the PSL (status **Created**).
 2. **Interactive charge** — wait for the user GO signal (link, click, SMS), then
    `proceed(psl_name, updated_tx_data)`. The controller may apply whitelisted
-   `tx_data` updates from user input. `proceed` runs the shared initiation core
-   for the `charge` flow (status **Initiated**).
-3. **Headless mandated charge** — **[Divergence]** a merchant-initiated renewal
-   has *no* user GO signal, so it cannot flow through `proceed()`. Instead the
-   backend calls the trusted (non-whitelisted) `charge_mandate(mandate,
-   tx_data, gateway)`, which runs the same initiation core for the
-   `mandated_charge` flow. For gateways that confirm synchronously
-   (Stripe `off_session=True, confirm=True`) the result is available
-   immediately and is fed straight into `process_response`.
-4. **Shared initiation core.** Both entry points call
-   `_run_initiation(psl, flow_type)`, which dispatches to the flow's
-   `_initiate_*` method, persists `correlation_id` + initiation payload +
-   `flow_type`, and returns the `Initiated` result. There is exactly **one**
-   initiate path; the two entry points differ only in how they present errors
-   (redirect vs returned `Processed`).
-5. The actual capture proceeds in collaboration with the gateway (client flow or
+   `tx_data` updates from user input.
+3. `proceed()` acquires the session `filelock` and delegates to
+   `_run_initiation(psl, updated_tx_data)`, which re-reads the idempotency guard
+   *inside* the lock, applies the filtered updates (status **Started**), calls
+   `_initiate_charge()`, and persists `correlation_id`, `flow_type` and the
+   initiation payload (status **Initiated**).
+4. The actual capture proceeds in collaboration with the gateway (client flow or
    server-to-server).
-6. `process_response(psl_name, payload)` recovers the controller and dispatches
-   on `flow_type` (`_FLOW_DISPATCH`):
+5. `process_response(psl_name, payload)` recovers the controller and:
+   - re-checks `is_settled()` after taking the processing lock;
    - `_validate_response()` checks payload integrity (e.g. signature against a
      shared key);
-   - `_process_response_for_<flow>()` maps the gateway status onto
-     `flowstates` (`success` / `pre_authorized` / `processing` / `declined`);
+   - `_process_response_for_charge()` maps the gateway status onto `flowstates`
+     (`success` / `pre_authorized` / `processing` / `declined`);
+   - the new gateway status is persisted (**Paid** / **Authorized** /
+     **Processing** / **Declined**);
    - the optional RefDoc hook runs and may override the user-facing result;
-   - the new status is persisted (**Paid** / **Authorized** / **Processing** /
-     **Declined** / **Cancelled** / **Error** / **Error - RefDoc**).
+     `reconciliation` records whether it succeeded.
 
-**[Divergence] `requires_action` on a headless charge.** If an off-session
-mandated charge comes back needing customer action (SCA, or the mandate needs
-re-authorization), `charge_mandate` returns a `Processed` whose action points at
-the `/pay?s=<PSL>` URL. The caller (e.g. a dues job) can email that link; the
-*same* PSL then completes through the normal interactive path. `flowstates` is
-left untouched — the branch lives in `charge_mandate`, not in a global
-reclassification.
+   Anything a gateway hook raises that is not one of the four handled exception
+   types is caught, recorded in the Error Log with a traceback, and turned into a
+   red `Processed` — moving the session to **Error** only if no gateway outcome
+   is recorded yet, so a persisted `Paid` is never overwritten. `frappe.Redirect`
+   is deliberately re-raised ahead of that handler, being control flow rather
+   than failure. There is a second handler on the outer scope covering the work
+   before the hooks run — reloading the session, rebuilding `TxData`, fetching
+   the reference document — because a failure there stranded the session at
+   **Initiated** with no trace.
 
 ### Idempotency
 
 `process_response` is expected to be idempotent: a server-to-server gateway
-response and a client-flow signed payload may arrive in parallel. The processing
-lock only ensures that parallel processing does not race; the terminal-state
-re-check makes a second arrival a no-op that returns the already-final status.
+response and a client-flow signed payload may arrive in parallel. The
+`is_settled()` re-check makes a second arrival a no-op that returns the already
+settled status.
+
+`proceed()` is idempotent through `initiation_response_payload`: if a gateway
+initiation is already held and the session is not `may_retry_charge()`, the
+stored payload is returned rather than initiating again. Not "non-terminal",
+which is the predicate that fix *replaced* — gating on it let a `Paid` session
+re-charge, since `Paid` is display-terminal.
+
+> **Known gaps, so they are not mistaken for guarantees:**
+>
+> - Both entry points take the **same** lock (`_session_lock_name`) through
+>   `frappe.utils.synchronization.filelock`. That lock is **host-local** — the
+>   lock file lives under the site directory — so it does not serialise across
+>   app servers or containers. The durable fix is a gateway-side idempotency key
+>   (the PSL name is a natural one), which is a per-gateway contract since each
+>   PSP names it differently.
+> - On lock contention `process_response` logs and re-raises rather than
+>   returning a state report, so a gateway resends instead of reading a
+>   non-error return as accepted. An interactive refresh landing inside the
+>   10-second window therefore sees an error.
+> - The `Created` purge bounds retention, **not the rate** at which guest-created
+>   sessions arrive. What bounds the rate is the pre-existing `@rate_limit` on
+>   `payment_webform.accept` (5/min, keyed on the web form). Adding a v2 guest
+>   entry point without a limit would reopen that, and the purge would not save it.
+> - Rendering `/pay` performs the initiation: the GET that follows the payer's
+>   `select_button` calls `proceed()`. A fresh session with no button selected
+>   initiates nothing, so an unfurl bot on the emailed link is harmless, but a
+>   GET still carries a state-changing side effect.
 
 ### Sequence Diagram
 
 ```mermaid
 sequenceDiagram
     participant RefDoc
-    participant Backend as Backend (renewal job)
     participant PaymentController
     actor Payer
     actor Gateway
     autonumber
 
     rect rgb(200, 150, 255)
-    Note over RefDoc, Gateway: Interactive charge (first payment; may save a mandate)
+    Note over RefDoc, Gateway: Interactive charge
     RefDoc->>+PaymentController: initiate(txdata, payment_gateway)
     Note over PaymentController: Status - "Created"
     Payer ->> PaymentController: proceed(pslname, updated_txdata)
-    Note over PaymentController: _run_initiation(charge) -> "Initiated"
+    Note over PaymentController: filelock -> _run_initiation -> "Initiated"
     PaymentController->>+Gateway: _initiate_charge()
     alt IPN (server-to-server)
         Gateway->>-PaymentController: process_response(pslname, payload)
@@ -214,28 +364,16 @@ sequenceDiagram
     end
     end
 
-    rect rgb(255, 210, 130)
-    Note over Backend, Gateway: Headless mandated charge (renewal; no user GO signal)
-    Backend->>+PaymentController: charge_mandate(mandate, txdata, gateway)
-    Note over PaymentController: _run_initiation(mandated_charge)
-    PaymentController->>Gateway: _initiate_mandated_charge() [off_session, confirm]
-    Gateway-->>PaymentController: synchronous result
-    alt requires_action
-        PaymentController-->>Backend: Processed(action -> /pay?s=PSL)
-        Note over Backend, Payer: email re-auth link; same PSL resumes interactive path
-    else resolved
-        PaymentController->>PaymentController: process_response(pslname, payload)
-    end
-    end
-
     rect rgb(70, 200, 255)
+    PaymentController -->> PaymentController: is_settled() re-check
     PaymentController -->> PaymentController: _validate_response()
-    PaymentController -->> PaymentController: _process_response_for_*()
+    PaymentController -->> PaymentController: _process_response_for_charge()
+    PaymentController -->> PaymentController: persist status (Paid|Authorized|Processing|Declined)
     opt RefDoc implements hook
-    PaymentController ->> RefDoc: on_payment_*_processed(changed, state, flags, flowstates)
+    PaymentController ->> RefDoc: on_payment_charge_processed(changed, state, flags, flowstates)
     RefDoc-->>PaymentController: return_value
     end
-    PaymentController -->> PaymentController: persist status (Paid|Authorized|Processing|Declined|Cancelled|Error|Error - RefDoc)
+    PaymentController -->> PaymentController: persist reconciliation (Done|Failed)
     end
 ```
 
@@ -243,7 +381,9 @@ sequenceDiagram
 >
 > - A server-to-server gateway response and a signed client-flow payload may
 >   occur in parallel; the blue area must therefore be **idempotent**.
-> - The processing lock only guarantees that parallel processing does not race.
+> - The gateway status is persisted **before** the RefDoc hook runs, and both
+>   error handlers preserve an already-recorded outcome, so a hook failure
+>   cannot destroy it.
 
 ### The Payment URL
 
@@ -252,30 +392,85 @@ at that URL captures the user's GO signal for the controller flow and renders
 terminal results. Kept tidy to convey trustworthiness:
 `https://my.site.tld/pay?s=<Payment Session Log name>`.
 
+## Designed but not in this PR
+
+The mandate model below is **design intent, not code on this branch**. No
+symbol here exists yet: there is no `PaymentMandate`, no
+`payments/controllers/payment_mandate.py`, no `charge_mandate`, no
+`_initiate_mandated_charge`, no `TxData.save_mandate` and no
+`SessionType.mandate_acquisition`. The implementation lives on the stacked
+branch `pr/4-mandate-framework`; this section records the shape it is being
+built to so the charge-path design here does not box it out.
+
+A _mandate_ represents a pre-authorization to charge a payer off-session
+(subscription, SEPA mandate, pre-authorized "hotel booking", tokenized
+"one-click").
+
+Two flows are planned beyond `charge`:
+
+- **Mandated Charge** — an off-session payment requiring little or no user
+  interaction thanks to a previously stored mandate.
+- **Mandate Acquisition** — acquire a mandate for future mandated charges.
+
+### How a mandate would be born — two paths
+
+| Path | When the mandate becomes usable | Gateways | Flow type |
+|------|---------------------------------|----------|-----------|
+| **First charge saves the mandate** | on first-charge **success** | Stripe (`setup_future_usage=off_session`), Mollie (`sequenceType: first` → mandate `valid` once the first payment succeeds) | `charge` + a `save_mandate` signal |
+| **Direct mandate** | at creation, with **no** charge | GoCardless (mandate-first), Mollie Mandates API (signed SEPA) | `mandate_acquisition` |
+
+**[Divergence] Acquisition-as-side-effect, primary path.** The ancestor design
+treats mandate acquisition as a first-class, user-interactive step (often a
+pre-step of a mandated charge). The plan is instead to make the primary
+acquisition a **side effect of the first charge**, keeping the direct-mandate
+path for gateways that need it.
+
+**[Divergence] Headless entry point.** The ancestor funnels every variant
+through the user-present `proceed()`, which cannot express a charge with no user
+GO signal. The plan adds a trusted, non-whitelisted `charge_mandate(...)` entry
+point over the same initiation core, and — where an off-session charge comes
+back needing customer action (SCA) — returns a `Processed` whose action points
+at `/pay?s=<PSL>` so the *same* session completes through the interactive path.
+
+> The transient gateway "pending mandate" (e.g. Mollie creates a `pending`
+> mandate the moment a `first` payment starts, valid only after it succeeds) is
+> a gateway internal. The framework would only persist/link a mandate when it
+> becomes usable — i.e. on first-charge success — which is identical for Stripe
+> and Mollie.
+
+## The v1 / v2 boundary
+
+Both generations declare `get_payment_url`, with incompatible contracts: v1 is an
+instance method taking `**kwargs`, v2's is a staticmethod taking a session name.
+`get_checkout_url` (and the Web Form override, which routes through it)
+therefore dispatches on `is_v2_gateway()` and adapts the v1 call shape onto
+`initiate()` + `get_payment_url(psl_name)` for a v2 gateway. Calling the v1 form
+on a v2 controller raised `TypeError` into a handler that answered a generic
+configuration error and logged nothing, so a v2 gateway on a Web Form failed
+invisibly; that handler now records a traceback.
+
 ## Other Folders
 
 - `payments/utils` — general utilities in `utils.py`, re-exported via
   `__init__.py` for convenient namespacing.
 - `payments/overrides` — overrides of standard Frappe code (currently the
   WebForm controller and a WebForm whitelisted method).
-- `payments/templates` — gateway-specific custom checkout pages.
+- `payments/templates` — gateway-specific custom checkout pages (v1 gateways).
 - `payments/types.py` — types and dataclasses for IDE-assisted integration
   development.
 - `payments/exceptions.py` — the app's exceptions.
-- `payments/controllers/payment_controller.py` — the controller base class;
-  `payments/controllers/payment_mandate.py` — the mandate base class.
+- `payments/controllers/payment_controller.py` — the controller base class.
+- `payments/patches/` — schema/data patches; currently the Payment Request
+  reference field for sites that predate it.
 - `payments/www/pay.{py,js,css,html}` — the unified checkout page.
 - `payments/payment_gateways/doctype/payment_demo_settings/` — a dependency-free
   reference/demo controller that doubles as the framework's test vehicle.
 
 ## Relationship to the ancestor design (blaggacao/refactor)
 
-We took blaggacao's design, **trimmed** the speculative mandate surface (the
-full three-variant scaffolding was removed as unimplemented), **hardened** the
-charge path (tamper whitelist, locking, fail-fast construction), and re-added a
-**narrow, consumer-backed** slice of the mandate model. The key conceptual
-divergence: the ancestor funnels every variant through the user-present
-`proceed()`, which cannot express a charge with no user GO signal; we add a
-headless `charge_mandate` entry point over a shared initiation core. Mandate
-acquisition stays first-class in the type model but unimplemented until a
-mandate-first gateway needs it.
+We took blaggacao's design, **trimmed** the speculative mandate surface out of
+the code (it is recorded as design intent above and implemented on a stacked
+branch), and **hardened** the charge path: tamper whitelist with an observable
+rejection, PII minimisation at the PSL boundary, serialised initiation, a
+frontend-safe gateway context, fail-fast controller declaration, and a state
+model that keeps the gateway's outcome separate from our own bookkeeping.

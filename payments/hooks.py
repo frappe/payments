@@ -179,3 +179,9 @@ override_whitelisted_methods = {
 # translated_search_doctypes = []
 
 export_python_type_annotations = True
+
+# Register the Payment Session Log with frappe's log retention. Log Settings
+# calls this doctype's own clear_old_logs(days=...), so our disposability rule
+# (never purge an in-flight or unreconciled session) is what actually runs, and
+# the window becomes site-configurable through Log Settings.
+default_log_clearing_doctypes = {"Payment Session Log": 90}

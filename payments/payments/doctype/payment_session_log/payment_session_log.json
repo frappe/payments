@@ -11,10 +11,15 @@
   "button",
   "flow_type",
   "gateway",
+  "selected_gateway",
   "mandate",
   "correlation_id",
   "tx_data",
   "initiation_response_payload",
+  "data_capture_payload",
+  "reconciliation",
+  "reconciliation_error",
+  "reconciliation_error_message",
   "processing_response_payload"
  ],
  "fields": [
@@ -26,7 +31,7 @@
    "read_only": 1
   },
   {
-   "default": "Queued",
+   "default": "Created",
    "fieldname": "status",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -43,6 +48,15 @@
    "label": "Gateway",
    "read_only": 1
   },
+   {
+    "description": "The payer's chosen gateway. Separate from `gateway`, which is the initiator's restriction and must not be narrowed by a selection.",
+    "in_list_view": 1,
+    "fieldname": "selected_gateway",
+    "in_standard_filter": 1,
+    "fieldtype": "Data",
+    "label": "Selected Gateway",
+    "read_only": 1
+   },
   {
    "fieldname": "tx_data",
    "fieldtype": "Code",
@@ -86,6 +100,36 @@
    "label": "Initiation Response Payload",
    "read_only": 1
   },
+   {
+    "fieldname": "data_capture_payload",
+    "fieldtype": "Code",
+    "label": "Data Capture Payload",
+    "read_only": 1
+   },
+   {
+    "description": "Whether our local bookkeeping for this payment completed. Independent of status, which records only what the gateway did.",
+    "fieldname": "reconciliation",
+    "fieldtype": "Select",
+    "label": "Reconciliation",
+    "options": "\nPending\nDone\nFailed",
+    "read_only": 1
+   },
+   {
+    "depends_on": "eval:doc.reconciliation == 'Failed'",
+    "fieldname": "reconciliation_error",
+    "fieldtype": "Link",
+    "label": "Reconciliation Error",
+    "options": "Error Log",
+    "read_only": 1
+   },
+   {
+    "depends_on": "eval:doc.reconciliation == 'Failed'",
+    "description": "Kept on the log itself: the linked Error Log is cleared after 14 days by frappe's log retention, while this row is retained until reconciliation succeeds.",
+    "fieldname": "reconciliation_error_message",
+    "fieldtype": "Code",
+    "label": "Reconciliation Error Message",
+    "read_only": 1
+   },
   {
    "fieldname": "processing_response_payload",
    "fieldtype": "Code",
