@@ -1,9 +1,23 @@
 from contextlib import contextmanager
+from typing import TYPE_CHECKING
 
 import click
 import frappe
 from frappe import _
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
+
+from payments.types import PSLName
+
+if TYPE_CHECKING:
+	from frappe.model.document import Document
+
+	from payments.controllers import PaymentController
+	from payments.payments.doctype.payment_session_log.payment_session_log import (
+		PaymentSessionLog,
+	)
+
+# Key used to identify the payment session on the frappe/erpnext side across its lifecycle
+PAYMENT_SESSION_REF_KEY = "s"
 
 
 def validate_integration_request(docname: str | None):
@@ -11,8 +25,27 @@ def validate_integration_request(docname: str | None):
 		frappe.throw(_("Expired Token"))
 
 
-def get_payment_gateway_controller(payment_gateway):
-	"""Return payment gateway controller"""
+def get_payment_gateway_controller(payment_gateway: str) -> "Document":
+	"""Return the payment gateway controller settings document instance.
+
+	This function always returns a Document **instance** (never a class).
+
+	The returned instance is the settings document for the gateway (e.g., "Stripe Settings"),
+	which may or may not inherit from PaymentController:
+	- V2 gateways: Instance of a Document subclass that inherits from PaymentController
+	- V1 gateways: Instance of a Document subclass that does NOT inherit from PaymentController
+
+	Use `is_v2_gateway()` to check if a gateway implements the PaymentController interface.
+
+	Args:
+	        payment_gateway: The name of the Payment Gateway document
+
+	Returns:
+	        Document instance of the gateway's settings DocType
+
+	Raises:
+	        frappe.ValidationError: If the gateway settings document is not found
+	"""
 	gateway = frappe.get_doc("Payment Gateway", payment_gateway)
 	if gateway.gateway_controller is None:
 		try:
@@ -26,11 +59,52 @@ def get_payment_gateway_controller(payment_gateway):
 			frappe.throw(_("{0} Settings not found").format(payment_gateway))
 
 
+def is_v2_gateway(payment_gateway: str) -> bool:
+	"""Check if a payment gateway implements the PaymentController interface (v2).
+
+	This function safely determines whether a gateway uses the new PaymentController
+	architecture (v2) or the legacy architecture (v1). Use this to conditionally
+	choose the appropriate payment flow.
+
+	The check is defensive and handles both edge cases:
+	- If controller is a class: uses issubclass()
+	- If controller is an instance: uses isinstance()
+
+	Note: get_payment_gateway_controller() always returns an instance, but this
+	defensive check is maintained for API robustness.
+
+	Args:
+	        payment_gateway: The name of the Payment Gateway document
+
+	Returns:
+	        True if the gateway implements PaymentController (v2), False otherwise.
+	        Returns False if the gateway doesn't exist or PaymentController cannot be imported.
+	"""
+	if not payment_gateway:
+		return False
+
+	try:
+		from payments.controllers import PaymentController
+	except ImportError:
+		return False
+
+	try:
+		controller = get_payment_gateway_controller(payment_gateway)
+	except Exception:
+		return False
+
+	# Defensive check: handle both class and instance (even though the function
+	# currently always returns an instance, this ensures API robustness)
+	if isinstance(controller, type):
+		return issubclass(controller, PaymentController)
+	return isinstance(controller, PaymentController)
+
+
 @frappe.whitelist(allow_guest=True, xss_safe=True)
 def get_checkout_url(**kwargs):
 	try:
 		if kwargs.get("payment_gateway"):
-			doc = frappe.get_doc("{} Settings".format(kwargs.get("payment_gateway")))
+			doc = get_payment_gateway_controller(kwargs.get("payment_gateway"))
 			return doc.get_payment_url(**kwargs)
 		else:
 			raise Exception
@@ -155,7 +229,18 @@ def make_custom_fields():
 					"reqd": 1,
 					"insert_after": "disabled",
 				}
-			]
+			],
+			"Payment Request": [
+				{
+					"fieldname": "payment_session_log",
+					"fieldtype": "Link",
+					"in_list_view": 1,
+					"label": "Payment Session Log",
+					"options": "Payment Session Log",
+					"read_only": 1,
+					"insert_after": "payment_url",
+				}
+			],
 		}
 
 		create_custom_fields(custom_fields)
@@ -166,27 +251,24 @@ def delete_custom_fields():
 		return
 
 	click.secho("* Uninstalling Payment Custom Fields from Web Form")
-	frappe.db.delete(
-		"Custom Field",
-		{
-			"dt": "Web Form",
-			"fieldname": (
-				"in",
-				(
-					"payments_tab",
-					"accept_payment",
-					"payment_gateway",
-					"payment_button_label",
-					"payment_button_help",
-					"payments_cb",
-					"amount_field",
-					"amount_based_on_field",
-					"amount",
-					"currency",
-				),
-			),
-		},
+
+	fieldnames = (
+		"payments_tab",
+		"accept_payment",
+		"payment_gateway",
+		"payment_button_label",
+		"payment_button_help",
+		"payments_cb",
+		"amount_field",
+		"amount_based_on_field",
+		"amount",
+		"currency",
 	)
+
+	for fieldname in fieldnames:
+		frappe.db.delete("Custom Field", {"name": "Web Form-" + fieldname})
+
+	frappe.db.delete("Custom Field", {"name": "Payment Request-payment_session_log"})
 
 	frappe.clear_cache(doctype="Web Form")
 

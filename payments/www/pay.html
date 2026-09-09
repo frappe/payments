@@ -1,0 +1,168 @@
+{% extends "templates/base.html" %}
+
+
+{% block title %}{{ title or _("Payment") }}{% endblock %}
+{% block navbar %}{% endblock %}
+
+{%- block head_include %}
+<style>	{% include "templates/styles/card_style.css" %}</style>
+{% if render_widget %}
+	{{ gateway_css }}
+{% endif %}
+{% endblock -%}
+
+{%- block content -%}
+<div class='page-card'>
+	<h5 class='page-card-head text-center'>
+		<span id="refdoc-indicator" class='indicator {{ indicator_color or "blue" }}'>
+			{{ tx_data.reference_docname }}</span>
+	</h5>
+	<div class="page-card-body">
+		{% block reference_body %}
+			{% set payer = tx_data.payer_contact -%}
+			{% if tx_data.discount_amount -%}
+				{% set total = tx_data.amount + tx_data.discount_amount -%}
+				<div class="d-flex justify-content-center">
+				<p class="text-right mr-2">
+					</br>
+					{% if tx_data.loyalty_points -%}
+					<small class="text-muted">{{ _("Used Points") }}:</small></br>
+					{%- endif %}
+					{{ _("Discount") }}:</br>
+					{{ _("Amount") }}:</br>
+				</p>
+				<p class="text-right ml-2">
+					{{ frappe.utils.fmt_money(total, currency=tx_data.currency) }}</br>
+					{% if tx_data.loyalty_points -%}
+					<small class="text-muted">{{ tx_data.loyalty_points[0] }}&emsp;{{ tx_data.loyalty_points[1] }}</small></br>
+					{%- endif %}
+					- {{ frappe.utils.fmt_money(tx_data.discount_amount, currency=tx_data.currency) }}</br>
+					= {{ frappe.utils.fmt_money(tx_data.amount, currency=tx_data.currency) }}</br>
+				</p>
+				</div>
+				<p class="text-center">
+					{{ _("Document") }}:&emsp;{{ tx_data.reference_doctype }}</br>
+					{{ _("Customer") }}:&emsp;{{ payer.get("full_name") }}</br>
+				</p>
+			{% else -%}
+				<p class="text-center">
+					{{ _("Amount") }}:&emsp;{{ frappe.utils.fmt_money(tx_data.amount, currency=tx_data.currency) }}</br>
+					{{ _("Document") }}:&emsp;{{ tx_data.reference_doctype }}</br>
+					{{ _("Customer") }}:&emsp;{{ payer.get("full_name") }}</br>
+				</p>
+			{%- endif %}
+		{% endblock %}
+		<hr/>
+		<p class="text-center">
+		<span id="status-wrapper" {% if not status or False %} style='display: none;'{% endif %}>
+		  {{ _("Status") }}: <span id="status"
+		  class='indicator-pill no-indicator-dot whitespace-nowrap {{ indicator_color or "blue" }}'
+		>{{ status or "" }}</span></span>
+		<span id="message-wrapper" style='display: none;'><br/>
+		  {{ _("Note") }}: <span id="message"></span></span>
+		</p>
+		{% if debug %}
+		<div id="debug-info" class="text-center" style="margin-top: 20px; word-wrap: break-word;">
+			<h6 style="font-size: 10px;">Debug Information:</h6>
+			<p style="font-size: 8px;">
+			DOM Loaded: <span id="dom-loaded">Not yet</span><br/>
+			Global Variables: <span id="global-variables">Checking...</span><br/>
+			</p>
+		</div>
+		<script>
+			console.log('Debug mode enabled');
+			window.onerror = function(message, source, lineno, colno, error) {
+				console.error('JavaScript error:', message, 'at', source, 'line', lineno);
+				var debugInfo = document.getElementById('debug-info');
+				if (debugInfo) {
+					var p = document.createElement('p');
+					p.style.cssText = 'font-size: 8px; color: red;';
+					p.textContent = 'Error: ' + message + ' at ' + source + ' line ' + lineno;
+					debugInfo.appendChild(p);
+				}
+			};
+
+			// Create a list of default window properties and known globals to exclude
+			var defaultProps = Object.getOwnPropertyNames(window);
+			var excludeList = [
+				'locals', 'NEWLINE', 'TAB', 'UP_ARROW', 'DOWN_ARROW',
+				'cur_frm', 'cstr', 'cint', 'toTitle', 'is_null', 'copy_dict', 'validate_email', 'validate_phone',
+				'validate_name', 'validate_url', 'nth', 'has_words', 'has_common', 'repl', 'replace_all', 'strip_html',
+				'strip', 'lstrip', 'rstrip', '__', 'website', 'valid_email', 'is_html', 'ask_to_login', 'msgprint'
+			];
+
+			document.addEventListener('DOMContentLoaded', function() {
+				document.getElementById('dom-loaded').textContent = 'Yes';
+				console.log('DOM fully loaded');
+
+				// Get all current window properties
+				var currentProps = Object.getOwnPropertyNames(window);
+
+				// Find new properties (likely to be libraries or global variables)
+				var newProps = currentProps.filter(function(prop) {
+					return defaultProps.indexOf(prop) === -1 && excludeList.indexOf(prop) === -1;
+				});
+
+				var librariesElement = document.getElementById('global-variables');
+				if (newProps.length > 0) {
+					librariesElement.textContent = newProps.join(', ');
+				} else {
+					librariesElement.textContent = 'None detected';
+				}
+				console.log('Detected global variables:', newProps);
+			});
+		</script>
+		{% endif %}
+		{% if logo %}
+		<img
+			class="app-logo mx-auto d-block"
+			src="{{ logo }}"
+			style="width: 150px"
+			alt="{{ _("Brand Logo") }}"
+		>
+		{% endif %}
+		{% if render_widget %}
+		<div class="mt-4">
+			<a id="action-processed"
+				class='btn btn-primary btn-sm btn-block'
+				style='display: none;'
+			></a>
+			{{ gateway_wrapper }}
+		</div>
+		{% endif %}
+		{% if render_buttons %}
+			<div id="button-section">
+			{% if render_widget or render_capture %}
+			<hr/>
+			<div class='text-info text-center small my-3'>{{ _("or change payment method") }}:</div>
+			{% endif %}
+			<div id="select-button-errors" class='text-danger text-center small my-3' style='display: none;'></div>
+			{% set primary_button = payment_buttons[0] %}
+			{% set secondary_buttons = payment_buttons[1:] %}
+			<div>
+				<div><button id="primary-button" data-button="{{ primary_button[1] }}" autofocus
+						class='btn btn-primary btn-sm btn-block btn-pay'>{{ primary_button[0] }}&ensp;{{ primary_button[2] }}</button></div>
+				{% for secondary_button in secondary_buttons %}
+				<div><button  data-button="{{ secondary_button[1] }}"
+						class='btn btn-secondary btn-sm btn-block btn-pay'>{{ secondary_button[0] }}&ensp;{{ secondary_button[2] }}</button></div>
+				{% endfor %}
+			</div>
+			</div>
+		{% endif %}
+	</div>
+</div>
+{% endblock %}
+
+{% block base_scripts %}
+{% if render_widget %}
+	{{ gateway_js}}
+{% endif %}
+
+<script>
+	frappe.boot = {{boot}}
+</script>
+{{ include_script('website-core.bundle.js') }}
+
+{% endblock %}
+
+{% set web_include_js=[] %}
