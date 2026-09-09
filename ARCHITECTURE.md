@@ -99,59 +99,125 @@ the ancestor design only gestured at:
   every concrete controller to declare `flowstates` and `frontend_defaults`, at
   class-definition time.
 
+## Adding a gateway
+
+A v2 gateway is a DocType controller that subclasses `PaymentController`. The
+smallest complete example in the tree is
+`payments/payment_gateways/doctype/payment_demo_settings/` — it performs no
+network I/O and is what the test suite runs against, so it is worth reading
+first.
+
+Declare two class attributes. `__init_subclass__` refuses the class at
+definition time if either is missing, so a half-declared controller fails on
+import rather than mid-payment:
+
+- `flowstates: SessionStates` — which gateway statuses count as `success`,
+  `pre_authorized`, `processing` or `declined`. Anything a gateway can report
+  that is in none of these categories is treated as an unmapped status and the
+  session becomes `Unresolved`.
+- `frontend_defaults: FrontendDefaults` — the CSS/JS/wrapper defaults for the
+  checkout page.
+
+Then implement the contracts (see the "Lifecycle hooks" block in
+`payment_controller.py`, which is the authoritative list):
+
+| Method | Purpose |
+|---|---|
+| `validate_tx_data(tx_data)` | throw, with a payer-facing message, if the transaction cannot proceed |
+| `_initiate_charge()` | call the gateway; return `Initiated(correlation_id, payload)` |
+| `_validate_response()` | check payload integrity, e.g. a signature against a shared secret |
+| `_process_response_for_charge()` | map the gateway's status onto `flowstates`; may return a `Processed` to override the default result |
+| `_render_failure_message()` | the payer-facing text for a decline |
+| `_is_server_to_server()` | whether the response arrives out-of-band (a webhook) rather than through the payer's browser |
+
+Optional overrides: `_patch_tx_data()` (per-gateway rounding or field fixes),
+`_pre_data_capture_hook()` (fetch data the capture form needs), and
+`is_user_flow_initiation_delegated()` (the reference document, not `/pay`, drives
+the payer — e.g. an emailed link).
+
+Never expose the settings document to the checkout page. Whatever the page needs
+goes through `get_frontend_safe_context()`, an explicit per-gateway allowlist;
+the default is empty, so a new gateway leaks nothing until it opts a field in.
+
 ## Payment Session Log state
 
 `status` records **what the gateway did**, and nothing else. Values written by
 this branch: `Created`, `Started`, `Initiated`, `Data Capture`, `Paid`,
-`Authorized`, `Processing`, `Declined`, `Error`. (`Cancelled` is defined in the
-maps below but no code on this branch writes it to a PSL — it is reserved, which
-also means `SETTLED_STATES` is effectively `{"Paid"}` today.)
+`Authorized`, `Processing`, `Declined`, `Error`, `Unresolved`. (`Cancelled` is
+defined in the maps below but no code on this branch writes it to a PSL — it is
+reserved, which also means `SETTLED_STATES` is effectively `{"Paid"}` today.)
+
+Three of those values describe a failure, and they are not interchangeable:
+
+- **`Error`** — initiation failed *before* the gateway was reached. Nothing was
+  sent, so nothing was charged and a retry is free: `may_retry_charge()` is true.
+  It is the **only** state that is, because it is the only one where no charge
+  attempt exists at the gateway.
+- **`Unresolved`** — the gateway answered and we could not act on its answer.
+  Either its response failed to process, or it reported a status this controller
+  does not map, which may well be a success we did not recognise. Money may be
+  held, so the session is neither retryable nor disposable — but it is **not**
+  settled either, so a later callback we *can* map still resolves it. This is the
+  one failure state that needs an operator.
+- **`Started` with no initiation payload** — the fingerprint of a request that
+  stopped between the gateway call and the recording of its result: a SIGKILL, a
+  worker timeout, an evicted container. `Started` is written immediately before
+  the call and by nothing else; every in-process failure writes `Error` or
+  `Unresolved`, and a session never attempted is `Created`. `proceed()` refuses
+  such a session and marks it `Unresolved` rather than charging again — see
+  `has_an_unrecorded_attempt()`.
+
+  That refusal is deliberately conservative: a request that died just *before*
+  the call cannot be told apart from one that died just *after*, so both are
+  refused. Resolving it properly means asking the gateway whether a charge
+  exists for the session, which is a per-gateway contract and is not implemented
+  here.
 
 Two gateway fields, likewise separated because they answer different questions:
 `gateway` is the **initiator's restriction** (which gateway this session must
 use, or blank for none) and is never narrowed afterwards; `selected_gateway` is
 the **payer's choice**, written by `select_button`. `get_controller()` prefers
-the selection and falls back to the restriction. Writing the selection into
-`gateway` turned an unrestricted session into one pinned to whatever the payer
-first clicked — so "or change payment method" could only offer that same button,
-and a retry after a decline would have been pinned to the gateway that declined
-it.
+the selection and falls back to the restriction. The payer's selection must
+never be written into `gateway`: that narrows the restriction to whatever was
+clicked first, so "or change payment method" can then only offer that same
+button, and a retry after a decline is pinned to the gateway that declined it.
 
-> **Not reachable from `/pay` today.** `Declined` is display-terminal, so the
-> page shows a result and no chooser, and `select_button` refuses a terminal
-> session. A retry is therefore only reachable server-side (a fresh `proceed()`
-> from the reference document), which is what `may_retry_charge()` and the
-> declined path's `button = None` reset serve. Letting a declined payer choose
-> another method on the page needs a fifth predicate — "should the page still
-> offer the flow?" — distinct from `is_terminal()`; deliberately not added here.
+> **A retry after a decline is a NEW session.** `Declined` is not in
+> `RETRYABLE_STATES`, and that is not an oversight: a decline is a gateway
+> answer, so a charge attempt exists, and this model deliberately keeps
+> `Declined` out of `SETTLED_STATES` so a PSP that settles a session it declined
+> is not ignored. Both can only hold at once if no second charge is started on
+> that log — otherwise two live charges sit behind one session and
+> `record_initiation` overwrites the first one's `correlation_id`. So the
+> reference document calls `initiate()` again, and each charge owns its own
+> spine. `/pay` shows a declined session its result and no chooser, which is
+> consistent with that.
 
 `reconciliation` (`Pending` / `Done` / `Failed`, blank when not applicable)
 records **what we did about it** — whether the RefDoc hook that performs local
 bookkeeping succeeded — with `reconciliation_error` linking the Error Log.
 
-Keeping these apart is load-bearing. Folding a reconciliation failure into
-`status` (as an `Error - RefDoc` value) overwrote `Paid`, destroying the only
-record that the money had moved.
+Keeping these apart is load-bearing. A reconciliation failure must never be
+written into `status`: it would overwrite the gateway's outcome and destroy the
+only record that money moved.
 
 Four sets answer four **independent** questions. They deliberately differ, and
-collapsing any two of them has produced a defect three times now:
+every defect this state model has had came from answering one question with
+another's set:
 
 | Predicate | Question | Every consumer |
 |---|---|---|
-| `is_terminal()` / `TERMINAL_STATES` | Should `/pay` stop showing the flow and show a result? Also the indicator-colour map. | **four**: `get_context` in `pay.py`, `select_button`, and *both* error handlers in `process_response` (the inner catch-all and the outer one), which use it to avoid overwriting a recorded gateway outcome — a fifth question it answers only because every terminal state happens to be a gateway outcome |
-| `is_settled()` / `SETTLED_STATES` | Can no gateway callback change this outcome again? | the re-check after taking the lock in `process_response` |
+| `is_terminal()` / `TERMINAL_STATES` | Should `/pay` stop showing the flow and show a result? Also the indicator-colour map. | **five**: `get_context` in `pay.py`; `select_button`; *both* error handlers in `process_response` (the inner catch-all and the outer one), which use it to avoid overwriting a recorded gateway outcome; and `_run_initiation`'s refusal to start a new charge on a finished session. The last three are really a different question — "has the gateway said anything yet?" — that it answers only because every terminal state happens to be a gateway outcome |
+| `is_settled()` / `SETTLED_STATES` | Can no gateway callback change this outcome again? | **one**: the re-check after taking the lock in `process_response` |
 | `is_disposable()` / `DISPOSABLE_STATES` ∪ `ABANDONED_STATES` | May the log be deleted past the retention window? Either the gateway answered, or the session never reached one (`Created`). Requires `reconciliation` to be neither `Failed` nor `Pending`. | **none in production.** `clear_old_logs` re-expresses the condition in SQL and never calls the predicate, so the two are twins that must change together — a test asserts they agree across every status × reconciliation pair |
-| `may_retry_charge()` / `RETRYABLE_STATES` | May a **new charge** be started for this session? | `_run_initiation`'s idempotency guard |
+| `may_retry_charge()` / `RETRYABLE_STATES` | May a **new charge** be started for this session? | **three**: in `_run_initiation`, the idempotency guard that replays a stored payload and the refusal to charge a finished session at all; and in `select_button`, the refusal to switch method once an initiation is recorded |
 
-**List every consumer in this table when you add a predicate, count them, and
-do NOT cite line numbers** — they rot on the next edit and a stale one reads as
-authority. This has now failed three times. The first version named only
-`pay.py` and `select_button` for `is_terminal()`, omitting the money path —
-which was then written against `is_terminal()`, so a `Paid` session re-charged.
-The second said "three consumers" and named one of the two `process_response`
-handlers. The third had the count right and every line number wrong: all three
-pointed at comments rather than call sites. A table that is the device against
-incompleteness is worth nothing when it is itself unreliable.
+**Every consumer is listed above, with a count.** Keep both current: a consumer
+added without updating this table is how the money path came to be written
+against the *display* predicate, which re-charged a paid session. Do not cite
+line numbers — they rot on the next edit, and a stale one reads as authority.
+After adding a call to any of these predicates, re-count: `git grep -n
+"is_terminal()"` and friends, ignoring comments.
 
 Consequences worth knowing:
 
@@ -161,7 +227,13 @@ Consequences worth knowing:
 - `Declined` and `Error` are **not** settled (a late settlement or a webhook
   retry is accepted) but **are** disposable, so declined sessions do not
   accumulate forever. Retention being a separate question is what lets both hold
-  at once.
+  at once. They differ on retryability: only `Error` may be charged again in
+  place, because only `Error` means the gateway was never reached.
+- `Unresolved` shares three of those four answers and differs on the one that
+  matters: terminal, not settled, not retryable — and **not** disposable either,
+  because the gateway answered and we could not act on it, so money may be held
+  and this row is the only trace. It is the only failure state that needs an
+  operator.
 - A captured payment whose reconciliation failed is never disposable, however
   old — that is exactly the audit trail to keep. Note what this does and does
   not give you: the record is **preserved and discoverable** (the list view
@@ -183,9 +255,9 @@ site through Log Settings.
 - `data_capture_payload` — scratch state fetched by `_pre_data_capture_hook` for
   the capture form.
 
-They look alike and were briefly written through one shared setter. That
-destroyed the idempotency token and let a page reload charge the payer twice, so
-each writer now does its own write and says why they are separate.
+They look alike, so it is tempting to write both through one setter. Doing that
+destroys the idempotency token and lets a page reload charge the payer twice:
+each has its own writer, and the code says so at both sites.
 
 ## Flow variants
 
@@ -210,7 +282,7 @@ with a working gateway widget on screen was told the same.
 | `render_buttons` | at least one enabled button matches the session's gateway filter | the chooser |
 | `render_widget` | a Third-Party-Widget button is selected | the gateway's own widget |
 | `render_capture` | a Data Capture button is selected | that button's capture form |
-| `no_payment_method` | nothing is selected *or* only a capture form is possible, **and** no enabled button matches | "No payment method is available" |
+| `no_payment_method` | nothing is selected (or the selection was withdrawn) **and** no enabled button matches | "No payment method is available" |
 
 `no_payment_method` is `False` on the widget branch — the widget *is* a payment
 method — and on the capture branch, whose form is likewise the method. It is
@@ -279,9 +351,13 @@ and keep customer choices open until the last moment.
    `tx_data` updates from user input.
 3. `proceed()` acquires the session `filelock` and delegates to
    `_run_initiation(psl, updated_tx_data)`, which re-reads the idempotency guard
-   *inside* the lock, applies the filtered updates (status **Started**), calls
-   `_initiate_charge()`, and persists `correlation_id`, `flow_type` and the
-   initiation payload (status **Initiated**).
+   *inside* the lock, refuses sessions that must not be charged again, applies
+   the filtered `tx_data` updates, sets status **Started** immediately before
+   the call, calls `_initiate_charge()`, and then records `correlation_id`,
+   `flow_type` and the initiation payload in a single write (status
+   **Initiated**). The status write sits where it does so that `Started` means
+   "the gateway may have been reached"; recording is one write so the session
+   never holds a charge without its idempotency token.
 4. The actual capture proceeds in collaboration with the gateway (client flow or
    server-to-server).
 5. `process_response(psl_name, payload)` recovers the controller and:
@@ -320,6 +396,11 @@ re-charge, since `Paid` is display-terminal.
 
 > **Known gaps, so they are not mistaken for guarantees:**
 >
+> - A charge that the gateway accepted but this app never recorded cannot be
+>   resolved automatically: `proceed()` refuses to retry it (see
+>   `has_an_unrecorded_attempt()`) and an operator must reconcile against the
+>   gateway. The durable fix is a per-gateway "does a charge exist for this
+>   session?" query, which no generic controller can implement.
 > - Both entry points take the **same** lock (`_session_lock_name`) through
 >   `frappe.utils.synchronization.filelock`. That lock is **host-local** — the
 >   lock file lives under the site directory — so it does not serialise across
@@ -354,8 +435,9 @@ sequenceDiagram
     RefDoc->>+PaymentController: initiate(txdata, payment_gateway)
     Note over PaymentController: Status - "Created"
     Payer ->> PaymentController: proceed(pslname, updated_txdata)
-    Note over PaymentController: filelock -> _run_initiation -> "Initiated"
+    Note over PaymentController: filelock -> _run_initiation -> "Started"
     PaymentController->>+Gateway: _initiate_charge()
+    Note over PaymentController: record_initiation (one write) -> "Initiated"
     alt IPN (server-to-server)
         Gateway->>-PaymentController: process_response(pslname, payload)
     else Client flow
@@ -442,12 +524,28 @@ at `/pay?s=<PSL>` so the *same* session completes through the interactive path.
 
 Both generations declare `get_payment_url`, with incompatible contracts: v1 is an
 instance method taking `**kwargs`, v2's is a staticmethod taking a session name.
-`get_checkout_url` (and the Web Form override, which routes through it)
-therefore dispatches on `is_v2_gateway()` and adapts the v1 call shape onto
-`initiate()` + `get_payment_url(psl_name)` for a v2 gateway. Calling the v1 form
-on a v2 controller raised `TypeError` into a handler that answered a generic
-configuration error and logged nothing, so a v2 gateway on a Web Form failed
-invisibly; that handler now records a traceback.
+`is_v2_gateway()` tells them apart, and there are two entry points because the
+adaptation is only safe on one side of the trust boundary:
+
+- **`build_checkout_url(payment_gateway, **kwargs)`** — server-side, **not**
+  whitelisted. Handles both generations, adapting the v1 call shape onto
+  `initiate()` + `get_payment_url(psl_name)` for a v2 gateway. The Web Form
+  override calls this.
+- **`get_checkout_url(**kwargs)`** — the guest-callable endpoint, v1 only. It
+  **refuses** a v2 gateway, because adapting one means creating a Payment
+  Session Log — the money spine — from caller-supplied amount, currency and
+  reference document. It also resolves the gateway exactly as `develop` does,
+  so a guest reaches no gateway through it that they could not reach before.
+
+`build_checkout_url` forwards `payment_gateway` on to v1 controllers, which
+Stripe's checkout page requires among its `expected_keys`.
+
+A v2 gateway reached through ERPNext's Payment Request still fails: ERPNext
+calls `controller.validate_transaction_currency(...)` unconditionally, five
+lines before `get_payment_url`, and `PaymentController` does not declare it.
+(It also calls `validate_minimum_transaction_amount`, but behind a `hasattr`
+check, so that one's absence is harmless.) The ERPNext-side v2 branch that
+routes around this is on `develop` only.
 
 ## Other Folders
 
