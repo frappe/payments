@@ -246,6 +246,20 @@ class StripeSettings(Document):
 			self, payment_intent_id=payment_intent_id, intent=intent
 		)
 
+	def capture_payment_intent(self, payment_intent_id, amount=None):
+		"""Take the money for a manual-capture authorisation on this account.
+
+		The other half of ``manual_capture``: the intent is left uncaptured when the
+		customer pays, and this is what finally charges the card. Idempotent.
+		"""
+		return stripe_integration.capture_payment_intent(
+			self, payment_intent_id, amount=amount
+		)
+
+	def cancel_payment_intent(self, payment_intent_id):
+		"""Release an authorisation on this account that will not be captured."""
+		return stripe_integration.cancel_payment_intent(self, payment_intent_id)
+
 	def finalize_request(self):
 		redirect_to = self.data.get("redirect_to") or None
 		redirect_message = self.data.get("redirect_message") or None

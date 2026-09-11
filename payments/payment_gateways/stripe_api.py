@@ -136,6 +136,79 @@ def get_open_payment_request(reference_doctype, reference_docname):
 	return frappe.get_doc("Payment Request", name)
 
 
+def resolve_payment_request_from_intent(intent):
+	"""The Payment Request a PaymentIntent belongs to, or None.
+
+	Every intent carries the Payment Request in its metadata (see
+	``payment_metadata``). That link is what makes a webhook usable at all: Stripe
+	sends us an intent, not a document.
+	"""
+	payment_request = (intent.get("metadata") or {}).get("payment_request")
+	if not payment_request or not frappe.db.exists("Payment Request", payment_request):
+		return None
+
+	return frappe.get_doc("Payment Request", payment_request)
+
+
+def get_active_authorization(reference_doctype, reference_docname):
+	"""The draft Payment Request holding a live card authorisation for a document.
+
+	A cart order whose card was only *held* is submitted straight away, while its
+	Payment Request deliberately stays a draft until the money actually moves - so a
+	draft ``requires_capture`` request *is* the record of a hold. Returns ``None``
+	when there is no hold, or when the one there was has been voided or has lapsed.
+
+	This is the read side of the deferred-capture flow: the customer portal uses it
+	to decide what an order is waiting on, and to keep offering payment for an order
+	whose hold has gone.
+	"""
+	name = frappe.db.get_value(
+		"Payment Request",
+		{
+			"reference_doctype": reference_doctype,
+			"reference_name": reference_docname,
+			"docstatus": 0,
+			"custom_intent_status": "requires_capture",
+		},
+		"name",
+	)
+	return frappe.get_doc("Payment Request", name) if name else None
+
+
+def mark_authorization_released(intent, status="canceled"):
+	"""Stop a document behaving as if a released card hold were still live.
+
+	The hold is released either by us (the customer declined) or by Stripe (the
+	authorisation window lapsed). Either way the order has to stop looking held,
+	because a live hold is what refuses further payment - a stale one would leave the
+	order permanently unpayable.
+
+	Idempotent, and it never touches a request that was actually paid. The order's
+	own status is only filled in when it is still open, so a ``Declined`` or
+	``Approved`` set by our own endpoint is not overwritten by a racing webhook.
+	"""
+	payment_request = resolve_payment_request_from_intent(intent)
+	if not payment_request:
+		return None
+
+	if payment_request.docstatus == 1 or payment_request.status == "Paid":
+		return None
+
+	payment_request.db_set("custom_intent_status", status, update_modified=False)
+
+	if payment_request.reference_doctype != "Sales Order":
+		return payment_request.name
+
+	if not frappe.db.exists("Sales Order", payment_request.reference_name):
+		return payment_request.name
+
+	sales_order = frappe.get_doc("Sales Order", payment_request.reference_name)
+	if sales_order.get("custom_lead_time_status") in ("Pending Review", "Awaiting Customer Approval"):
+		sales_order.db_set("custom_lead_time_status", "Expired", update_modified=False)
+
+	return payment_request.name
+
+
 def fallback_redirect(payment_request):
 	"""Where to send a customer when the app hook had no opinion.
 
@@ -201,11 +274,11 @@ def stripe_webhook():
 	"""Stripe webhook endpoint.
 
 	Register ``https://<site>/api/method/payments.payment_gateways.stripe_api.stripe_webhook``
-	in the Stripe dashboard for ``payment_intent.succeeded`` and
-	``payment_intent.amount_capturable_updated`` (plus optionally
-	``payment_intent.payment_failed``). It exists because the browser callback is
-	best-effort: the customer may close the tab, lose connectivity, or the payment
-	method may settle asynchronously.
+	in the Stripe dashboard for ``payment_intent.succeeded``,
+	``payment_intent.amount_capturable_updated`` and ``payment_intent.canceled``
+	(plus optionally ``payment_intent.payment_failed``). It exists because the
+	browser callback is best-effort: the customer may close the tab, lose
+	connectivity, or the payment method may settle asynchronously.
 
 	``amount_capturable_updated`` matters when Stripe Settings is set to authorise
 	only: it is the only signal that a card was successfully held, and it is what
@@ -249,9 +322,26 @@ def stripe_webhook():
 			)
 			raise
 
-	if event_type in ("payment_intent.payment_failed", "payment_intent.canceled"):
+	if event_type == "payment_intent.canceled":
+		# A hold that will never be captured - released by us when the customer
+		# declined, or by Stripe when the authorisation window lapsed. The order must
+		# stop behaving as if the card were still held, or it can never be paid for.
+		try:
+			intent = controller.retrieve_payment_intent(intent_id)
+			released = mark_authorization_released(intent, status="canceled")
+			return {"status": "released", "payment_request": released}
+		except Exception:
+			# Not retried: the housekeeping job is the safety net, and a failure here
+			# is usually permanent (the document is gone), so a retry would just loop.
+			frappe.log_error(
+				title="Stripe webhook: could not release a card authorisation",
+				message=f"{intent_id}\n{frappe.get_traceback()}",
+			)
+			return {"status": "error"}
+
+	if event_type == "payment_intent.payment_failed":
 		frappe.log_error(
-			title=f"Stripe webhook: {event_type}",
+			title="Stripe webhook: payment_intent.payment_failed",
 			message=json.dumps(
 				{
 					"payment_intent": intent_id,

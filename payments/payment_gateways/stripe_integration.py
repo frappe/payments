@@ -207,6 +207,80 @@ def retrieve_payment_intent(controller, payment_intent_id):
 		frappe.throw(_("We could not verify this payment with the payment provider."))
 
 
+def capture_payment_intent(controller, payment_intent_id, amount=None):
+	"""Take the money for a manual-capture authorisation.
+
+	This is the second half of "authorise now, charge later": the intent was left in
+	``requires_capture`` at checkout, and this is what finally moves the funds.
+
+	Idempotent by re-reading the intent first, so it is safe both when the customer
+	approves and when a webhook has already captured the same intent - the money
+	cannot move twice. ``amount`` captures less than the full hold, which releases
+	the remainder.
+
+	What a captured payment *means* for the documents behind it is deliberately not
+	decided here: that is ``finalize_payment_intent``'s job, and every caller does it
+	once, from the intent read back from Stripe.
+	"""
+	if not payment_intent_id:
+		frappe.throw(_("Missing payment reference."))
+
+	intent = retrieve_payment_intent(controller, payment_intent_id)
+
+	if intent.get("status") == "succeeded":
+		# Already captured - by an earlier click, or by someone in the Stripe
+		# dashboard. There is nothing left to do.
+		return intent
+
+	if intent.get("status") != PENDING_CAPTURE_INTENT_STATUS:
+		frappe.throw(
+			_("This card authorisation is no longer active and cannot be charged."),
+			title=_("Payment Failed"),
+		)
+
+	params = {}
+	if amount:
+		params["amount_to_capture"] = to_stripe_amount(amount, intent.get("currency"))
+
+	stripe_api = get_stripe_api(controller)
+	try:
+		return stripe_api.PaymentIntent.capture(payment_intent_id, **params)
+	except Exception:
+		frappe.log_error(
+			title="Stripe: could not capture a PaymentIntent",
+			message=f"{payment_intent_id}\n{frappe.get_traceback()}",
+		)
+		frappe.throw(_("We could not take the payment. Please try again."))
+
+
+def cancel_payment_intent(controller, payment_intent_id):
+	"""Release a card hold that is never going to be taken.
+
+	Runs when the customer declines the lead time, and from housekeeping when a hold
+	lapses. Like ``capture_payment_intent`` it re-reads first and is idempotent: an
+	intent that is already ``canceled`` - or that was captured in the meantime - is
+	returned unchanged, because Stripe refuses to cancel those and the caller only
+	cares about the end state.
+	"""
+	if not payment_intent_id:
+		frappe.throw(_("Missing payment reference."))
+
+	intent = retrieve_payment_intent(controller, payment_intent_id)
+
+	if intent.get("status") in ("canceled", "succeeded"):
+		return intent
+
+	stripe_api = get_stripe_api(controller)
+	try:
+		return stripe_api.PaymentIntent.cancel(payment_intent_id)
+	except Exception:
+		frappe.log_error(
+			title="Stripe: could not cancel a PaymentIntent",
+			message=f"{payment_intent_id}\n{frappe.get_traceback()}",
+		)
+		frappe.throw(_("We could not release this card authorisation."))
+
+
 def verify_webhook_signature(controller, payload, signature):
 	"""Verify a webhook's Stripe signature, when a signing secret is configured.
 
@@ -272,6 +346,10 @@ def finalize_payment_intent(controller, payment_intent_id=None, intent=None):
 	# The hook may want the audit trail, and the reference document often cannot be
 	# paid against until it has been submitted.
 	pr.flags.payment_intent_id = intent.get("id")
+	# The hook also persists the *hold* for a manual-capture authorisation - the
+	# amount, currency and expiry all come from the intent - and the gateways' hook
+	# signature is a bare status string, so the intent travels as a flag.
+	pr.flags.payment_intent = intent
 
 	if authorized:
 		# The money is still on the customer's card: submitting the Payment Request
