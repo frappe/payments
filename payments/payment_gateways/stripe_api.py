@@ -30,6 +30,11 @@ from payments.utils import get_payment_gateway_controller
 # Payment Request statuses that can still be paid.
 PAYABLE_STATUSES = ("Requested", "Initiated", "Partially Paid")
 
+# ``Payment Request.custom_intent_status`` for a card that is held but not charged.
+# The single definition of a *live* hold: a released or lapsed one must never look
+# live again, or the order it is attached to can never be paid for.
+AUTHORIZATION_STATUS = "requires_capture"
+
 
 def get_controller(payment_request=None):
 	"""Resolve the Stripe Settings record a payment belongs to.
@@ -150,27 +155,65 @@ def resolve_payment_request_from_intent(intent):
 	return frappe.get_doc("Payment Request", payment_request)
 
 
+def _deferred_capture_fields_available():
+	"""Whether the deferred-capture fields exist on Payment Request.
+
+	They are declared by the webshop app, because deferred capture is a *checkout*
+	behaviour - the cart authorises and the customer approves later. This app has to
+	keep working on a site without webshop, so everything below degrades to "there is
+	no hold" rather than querying a column that is not there.
+
+	Checked through the cached doctype meta rather than ``frappe.db.has_column``,
+	because ``has_active_authorization`` is called once per document by the portal's
+	list views.
+	"""
+	return frappe.get_meta("Payment Request").has_field("custom_intent_status")
+
+
+def _authorization_filters(reference_doctype, reference_docname):
+	"""What makes a draft Payment Request a *live* card hold for a document.
+
+	A cart order whose card was only held is submitted straight away, while its
+	Payment Request deliberately stays a draft until the money actually moves - so a
+	draft ``requires_capture`` request *is* the hold. Kept in one place because three
+	things depend on agreeing about it: the portal's "already authorised, don't charge
+	again" guard, the lead-time pages, and housekeeping.
+	"""
+	return {
+		"reference_doctype": reference_doctype,
+		"reference_name": reference_docname,
+		"docstatus": 0,
+		"custom_intent_status": AUTHORIZATION_STATUS,
+	}
+
+
+def has_active_authorization(reference_doctype, reference_docname):
+	"""Whether a card hold is alive for a document. Cheap enough for list views."""
+	if not reference_doctype or not reference_docname:
+		return False
+	if not _deferred_capture_fields_available():
+		return False
+
+	return bool(
+		frappe.db.exists("Payment Request", _authorization_filters(reference_doctype, reference_docname))
+	)
+
+
 def get_active_authorization(reference_doctype, reference_docname):
 	"""The draft Payment Request holding a live card authorisation for a document.
 
-	A cart order whose card was only *held* is submitted straight away, while its
-	Payment Request deliberately stays a draft until the money actually moves - so a
-	draft ``requires_capture`` request *is* the record of a hold. Returns ``None``
-	when there is no hold, or when the one there was has been voided or has lapsed.
+	Returns ``None`` when there is no hold, or when the one there was has been voided,
+	captured or has lapsed.
 
-	This is the read side of the deferred-capture flow: the customer portal uses it
-	to decide what an order is waiting on, and to keep offering payment for an order
-	whose hold has gone.
+	This is the read side of the deferred-capture flow: the customer portal uses it to
+	decide what an order is waiting on, and to start offering payment again for an
+	order whose hold has gone.
 	"""
+	if not _deferred_capture_fields_available():
+		return None
+
 	name = frappe.db.get_value(
-		"Payment Request",
-		{
-			"reference_doctype": reference_doctype,
-			"reference_name": reference_docname,
-			"docstatus": 0,
-			"custom_intent_status": "requires_capture",
-		},
-		"name",
+		"Payment Request", _authorization_filters(reference_doctype, reference_docname), "name"
 	)
 	return frappe.get_doc("Payment Request", name) if name else None
 
@@ -187,6 +230,9 @@ def mark_authorization_released(intent, status="canceled"):
 	own status is only filled in when it is still open, so a ``Declined`` or
 	``Approved`` set by our own endpoint is not overwritten by a racing webhook.
 	"""
+	if not _deferred_capture_fields_available():
+		return None
+
 	payment_request = resolve_payment_request_from_intent(intent)
 	if not payment_request:
 		return None
@@ -200,6 +246,11 @@ def mark_authorization_released(intent, status="canceled"):
 		return payment_request.name
 
 	if not frappe.db.exists("Sales Order", payment_request.reference_name):
+		return payment_request.name
+
+	# The Sales Order field is webshop's too, and only webshop orders enter the
+	# lead-time flow - without it there is simply no order status to move.
+	if not frappe.get_meta("Sales Order").has_field("custom_lead_time_status"):
 		return payment_request.name
 
 	sales_order = frappe.get_doc("Sales Order", payment_request.reference_name)
