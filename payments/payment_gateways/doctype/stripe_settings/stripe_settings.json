@@ -141,6 +141,14 @@
    "unique": 0
   },
   {
+   "description": "From the Stripe dashboard (Developers > Webhooks). Used to verify that incoming webhooks really come from Stripe.",
+   "fieldname": "webhook_secret",
+   "fieldtype": "Password",
+   "label": "Webhook Signing Secret",
+   "no_copy": 1,
+   "print_hide": 1
+  },
+  {
    "allow_bulk_edit": 0,
    "allow_in_quick_entry": 0,
    "allow_on_submit": 0,

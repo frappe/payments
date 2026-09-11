@@ -6,10 +6,11 @@ from urllib.parse import urlencode
 
 import frappe
 from frappe import _
-from frappe.integrations.utils import create_request_log, make_get_request
+from frappe.integrations.utils import make_get_request
 from frappe.model.document import Document
-from frappe.utils import call_hook_method, cint, flt, get_url
+from frappe.utils import call_hook_method, flt, get_url
 
+from payments.payment_gateways import stripe_integration
 from payments.utils import create_payment_gateway
 
 currency_wise_minimum_charge_amount = {
@@ -193,52 +194,44 @@ class StripeSettings(Document):
 	def get_payment_url(self, **kwargs):
 		return get_url(f"./stripe_checkout?{urlencode(kwargs)}")
 
-	def create_request(self, data):
-		import stripe
+	def create_payment_intent(
+		self,
+		amount,
+		currency,
+		description=None,
+		email=None,
+		metadata=None,
+		idempotency_key=None,
+	):
+		"""Create (or re-fetch) a PaymentIntent on this Stripe account.
 
-		self.data = frappe._dict(data)
-		stripe.api_key = self.get_password(fieldname="secret_key", raise_exception=False)
-		stripe.default_http_client = stripe.http_client.RequestsClient()
+		Replaces the legacy token + ``stripe.Charge`` flow, which could not handle
+		3-D Secure: the browser confirms this intent with Stripe.js instead, and the
+		result is only acted on once it has been read back from Stripe.
+		"""
+		return stripe_integration.create_payment_intent(
+			self,
+			amount=amount,
+			currency=currency,
+			description=description,
+			email=email,
+			metadata=metadata,
+			idempotency_key=idempotency_key,
+		)
 
-		try:
-			self.integration_request = create_request_log(self.data, service_name="Stripe")
-			return self.create_charge_on_stripe()
+	def retrieve_payment_intent(self, payment_intent_id):
+		"""Read a PaymentIntent of this Stripe account back from Stripe."""
+		return stripe_integration.retrieve_payment_intent(self, payment_intent_id)
 
-		except Exception:
-			frappe.log_error(frappe.get_traceback())
-			return {
-				"redirect_to": frappe.redirect_to_message(
-					_("Server Error"),
-					_(
-						"It seems that there is an issue with the server's stripe configuration. In case of failure, the amount will get refunded to your account."
-					),
-				),
-				"status": 401,
-			}
+	def verify_webhook_signature(self, payload, signature):
+		"""Verify the signature of an incoming Stripe webhook."""
+		return stripe_integration.verify_webhook_signature(self, payload, signature)
 
-	def create_charge_on_stripe(self):
-		import stripe
-
-		try:
-			charge = stripe.Charge.create(
-				amount=cint(flt(self.data.amount) * 100),
-				currency=self.data.currency,
-				source=self.data.stripe_token_id,
-				description=self.data.description,
-				receipt_email=self.data.payer_email,
-			)
-
-			if charge.captured is True:
-				self.integration_request.db_set("status", "Completed", update_modified=False)
-				self.flags.status_changed_to = "Completed"
-
-			else:
-				frappe.log_error(charge.failure_message, "Stripe Payment not completed")
-
-		except Exception:
-			frappe.log_error(frappe.get_traceback())
-
-		return self.finalize_request()
+	def finalize_payment_intent(self, payment_intent_id=None, intent=None):
+		"""Record a succeeded PaymentIntent against its Payment Request."""
+		return stripe_integration.finalize_payment_intent(
+			self, payment_intent_id=payment_intent_id, intent=intent
+		)
 
 	def finalize_request(self):
 		redirect_to = self.data.get("redirect_to") or None
