@@ -4,7 +4,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import cint, fmt_money
+from frappe.utils import fmt_money
 
 from payments.payment_gateways.doctype.stripe_settings.stripe_settings import (
 	get_gateway_controller,
@@ -68,11 +68,10 @@ def get_context(context):
 
 
 def get_api_key(doc, gateway_controller):
-	publishable_key = frappe.db.get_value("Stripe Settings", gateway_controller, "publishable_key")
-	if cint(frappe.form_dict.get("use_sandbox")):
-		publishable_key = frappe.conf.sandbox_publishable_key
-
-	return publishable_key
+	# No sandbox override: the PaymentIntent (or the subscription mandate) is always
+	# created with the keys on Stripe Settings, so a swapped publishable key could
+	# never match the secret key.
+	return frappe.db.get_value("Stripe Settings", gateway_controller, "publishable_key")
 
 
 def get_header_image(doc, gateway_controller):
