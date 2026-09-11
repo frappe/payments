@@ -30,6 +30,15 @@ ZERO_DECIMAL_CURRENCIES = frozenset(
 	}
 )
 
+# Stripe's status for a manual-capture authorisation that is holding the money on
+# the customer's card without taking it.
+PENDING_CAPTURE_INTENT_STATUS = "requires_capture"
+
+# Hook status handed to ``on_payment_authorized`` for such an authorisation. It is
+# deliberately *not* "Authorized": that is what gateways like Razorpay report when
+# the money is on its way, and apps record those as paid.
+PENDING_CAPTURE = "Pending Capture"
+
 
 def create_stripe_subscription(gateway_controller, data):
 	stripe_settings = frappe.get_doc("Stripe Settings", gateway_controller)
@@ -108,6 +117,16 @@ def get_stripe_api(controller):
 	return stripe
 
 
+def get_capture_method(controller):
+	"""``manual`` when the account authorises only, else ``automatic``.
+
+	Tolerant of a controller without the field, so this also works against a
+	Stripe Settings record that has not been migrated yet - which must behave the
+	way it always did: charge immediately.
+	"""
+	return "manual" if controller.get("manual_capture") else "automatic"
+
+
 def to_stripe_amount(amount, currency):
 	"""Convert an amount to Stripe's smallest-unit integer."""
 	if (currency or "").upper() in ZERO_DECIMAL_CURRENCIES:
@@ -124,12 +143,17 @@ def create_payment_intent(
 	email=None,
 	metadata=None,
 	idempotency_key=None,
+	capture_method=None,
 ):
 	"""Create (or re-fetch) a PaymentIntent for ``amount`` in ``currency``.
 
 	An ``idempotency_key`` makes a retried call return the *same* intent instead of
 	raising a second one for the same payment. Include the amount in it, so that an
 	edited basket gets a fresh intent rather than the old amount.
+
+	``capture_method`` defaults to the account's ``Stripe Settings`` - ``manual``
+	leaves the money on the card untouched until the intent is captured, which is
+	what "approve the payment in Stripe first" needs.
 	"""
 	stripe_api = get_stripe_api(controller)
 
@@ -138,6 +162,11 @@ def create_payment_intent(
 		"currency": (currency or "").lower(),
 		"payment_method_types": ["card"],
 	}
+
+	# Only send the parameter when it differs from Stripe's default, so an account
+	# that charges immediately keeps sending exactly the request it always did.
+	if (capture_method or get_capture_method(controller)) == "manual":
+		params["capture_method"] = "manual"
 
 	if description:
 		params["description"] = description
@@ -205,19 +234,28 @@ def verify_webhook_signature(controller, payload, signature):
 
 
 def finalize_payment_intent(controller, payment_intent_id=None, intent=None):
-	"""Record a *succeeded* PaymentIntent against its Payment Request.
+	"""Act on a PaymentIntent that Stripe has come back with.
+
+	Two outcomes are accepted, and they are *not* the same thing:
+
+	* ``succeeded`` - the money has moved. The Payment Request is submitted and the
+	  reference document's ``on_payment_authorized("Completed")`` hook runs.
+	* ``requires_capture`` - a manual-capture authorisation. The card is only held,
+	  so nothing is recorded as paid; the hook runs with ``PENDING_CAPTURE`` instead
+	  so the app can place the order, and the payment is recorded later when
+	  capturing in the Stripe dashboard fires ``payment_intent.succeeded``.
 
 	Idempotent: the browser callback and the webhook routinely race, and Stripe
 	retries webhooks, so the Payment Request may already be paid by the time we get
 	here.
 
-	Hands over to the ``on_payment_authorized`` hook, which each app uses to say what
-	"paid" means for its documents (the webshop submits its draft Sales Order and
-	clears the cart there). Returns ``redirect_to``, ``payment_request`` and
-	``already_paid``.
+	Returns ``redirect_to``, ``payment_request``, ``already_paid`` and
+	``authorized``.
 	"""
 	intent = intent or retrieve_payment_intent(controller, payment_intent_id)
-	if intent.get("status") != "succeeded":
+	status = intent.get("status")
+	authorized = status == PENDING_CAPTURE_INTENT_STATUS
+	if status != "succeeded" and not authorized:
 		frappe.throw(_("Payment has not been completed."), title=_("Payment Failed"))
 
 	payment_request = (intent.get("metadata") or {}).get("payment_request")
@@ -227,11 +265,23 @@ def finalize_payment_intent(controller, payment_intent_id=None, intent=None):
 	pr = frappe.get_doc("Payment Request", payment_request)
 
 	if pr.status == "Paid":
-		return frappe._dict(redirect_to=None, payment_request=pr.name, already_paid=True)
+		return frappe._dict(
+			redirect_to=None, payment_request=pr.name, already_paid=True, authorized=False
+		)
 
 	# The hook may want the audit trail, and the reference document often cannot be
 	# paid against until it has been submitted.
 	pr.flags.payment_intent_id = intent.get("id")
+
+	if authorized:
+		# The money is still on the customer's card: submitting the Payment Request
+		# here would post a Payment Entry for funds that were never collected.
+		return frappe._dict(
+			redirect_to=run_on_payment_authorized(pr, PENDING_CAPTURE),
+			payment_request=pr.name,
+			already_paid=False,
+			authorized=True,
+		)
 
 	if pr.docstatus == 0:
 		pr.flags.ignore_permissions = True
@@ -242,11 +292,17 @@ def finalize_payment_intent(controller, payment_intent_id=None, intent=None):
 		redirect_to=run_on_payment_authorized(pr, "Completed"),
 		payment_request=pr.name,
 		already_paid=False,
+		authorized=False,
 	)
 
 
 def run_on_payment_authorized(payment_request, status):
-	"""Let the app say what a captured payment means for its documents.
+	"""Let the app say what a payment means for its documents.
+
+	``status`` is either ``"Completed"`` (the money moved), one of the other
+	statuses a gateway reports as "we will get paid" (Razorpay's ``"Authorized"``,
+	for instance), or ``PENDING_CAPTURE`` for a manual-capture hold where no money
+	has moved at all.
 
 	Every gateway in this app expects an ``on_payment_authorized`` method on the
 	*reference* document, and that is the fallback here. A Payment Request may

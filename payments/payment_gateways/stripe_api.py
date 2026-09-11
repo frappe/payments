@@ -201,10 +201,16 @@ def stripe_webhook():
 	"""Stripe webhook endpoint.
 
 	Register ``https://<site>/api/method/payments.payment_gateways.stripe_api.stripe_webhook``
-	in the Stripe dashboard for ``payment_intent.succeeded`` (and optionally
+	in the Stripe dashboard for ``payment_intent.succeeded`` and
+	``payment_intent.amount_capturable_updated`` (plus optionally
 	``payment_intent.payment_failed``). It exists because the browser callback is
 	best-effort: the customer may close the tab, lose connectivity, or the payment
 	method may settle asynchronously.
+
+	``amount_capturable_updated`` matters when Stripe Settings is set to authorise
+	only: it is the only signal that a card was successfully held, and it is what
+	lets the order be placed even when the customer never makes it back from
+	Stripe.js. The capture itself arrives later, as ``payment_intent.succeeded``.
 	"""
 	if frappe.request is None:
 		return {"status": "ignored"}
@@ -223,7 +229,11 @@ def stripe_webhook():
 	if not intent_id:
 		return {"status": "ignored"}
 
-	if event_type == "payment_intent.succeeded":
+	# ``succeeded`` is the money moving (immediately, or the moment a manual-capture
+	# intent is captured from the Stripe dashboard). ``amount_capturable_updated``
+	# is a card that has just been held instead. Both are finalised from the intent
+	# re-read from Stripe, so neither can be faked by the caller.
+	if event_type in ("payment_intent.succeeded", "payment_intent.amount_capturable_updated"):
 		try:
 			intent = controller.retrieve_payment_intent(intent_id)
 			result = controller.finalize_payment_intent(intent=intent)

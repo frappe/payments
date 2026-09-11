@@ -149,6 +149,13 @@
    "print_hide": 1
   },
   {
+   "default": "0",
+   "description": "Authorise the card at checkout but do not take the money: the PaymentIntent is left 'uncaptured' and you capture it from the Stripe dashboard once you are ready to ship. The order is placed as soon as the card is authorised, and the payment is recorded when you capture it. Uncaptured authorisations lapse after about 7 days. Turn this off to charge the card immediately, as before.",
+   "fieldname": "manual_capture",
+   "fieldtype": "Check",
+   "label": "Authorise Only (Capture Later in Stripe)"
+  },
+  {
    "allow_bulk_edit": 0,
    "allow_in_quick_entry": 0,
    "allow_on_submit": 0,

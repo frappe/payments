@@ -194,6 +194,15 @@ class StripeSettings(Document):
 	def get_payment_url(self, **kwargs):
 		return get_url(f"./stripe_checkout?{urlencode(kwargs)}")
 
+	def get_capture_method(self):
+		"""How PaymentIntents on this account are captured.
+
+		``manual`` leaves the intent uncaptured after the customer confirms, so the
+		money is only taken when someone captures it - from the Stripe dashboard, or
+		by an API call. ``automatic`` charges immediately.
+		"""
+		return "manual" if self.get("manual_capture") else "automatic"
+
 	def create_payment_intent(
 		self,
 		amount,
@@ -202,12 +211,15 @@ class StripeSettings(Document):
 		email=None,
 		metadata=None,
 		idempotency_key=None,
+		capture_method=None,
 	):
 		"""Create (or re-fetch) a PaymentIntent on this Stripe account.
 
 		Replaces the legacy token + ``stripe.Charge`` flow, which could not handle
 		3-D Secure: the browser confirms this intent with Stripe.js instead, and the
 		result is only acted on once it has been read back from Stripe.
+
+		``capture_method`` defaults to this account's ``manual_capture`` setting.
 		"""
 		return stripe_integration.create_payment_intent(
 			self,
@@ -217,6 +229,7 @@ class StripeSettings(Document):
 			email=email,
 			metadata=metadata,
 			idempotency_key=idempotency_key,
+			capture_method=capture_method,
 		)
 
 	def retrieve_payment_intent(self, payment_intent_id):
