@@ -184,7 +184,7 @@ class PayPalSettings(Document):
 		try:
 			res = make_nvp_request(url=url, data=params.encode("utf-8"))
 
-			if res.get("ACK", [""])[0] == "Failure":
+			if res.get("ACK", [""])[0] != "Success":
 				raise Exception
 
 		except Exception:
@@ -200,10 +200,13 @@ class PayPalSettings(Document):
 		else:
 			return_url = "https://www.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token={0}"
 
+		token = (response.get("TOKEN") or [""])[0].strip()
+		correlation_id = (response.get("CORRELATIONID") or [""])[0].strip()
+
 		kwargs.update(
 			{
-				"token": response.get("TOKEN")[0],
-				"correlation_id": response.get("CORRELATIONID")[0],
+				"token": token,
+				"correlation_id": correlation_id,
 			}
 		)
 
@@ -231,7 +234,9 @@ class PayPalSettings(Document):
 		params = urlencode(params)
 		response = make_nvp_request(url, data=params.encode("utf-8"))
 
-		if response.get("ACK", [""])[0] != "Success":
+		token = (response.get("TOKEN") or [""])[0].strip()
+
+		if response.get("ACK", [""])[0] != "Success" or not token:
 			create_request_log(response, service_name="PayPal", status="Failed")
 			frappe.throw(_("Looks like something is wrong with this site's Paypal configuration."))
 
@@ -294,7 +299,9 @@ def get_express_checkout_details(token):
 
 		response = make_nvp_request(url, data=params)
 
-		if response.get("ACK", [""])[0] != "Success":
+		payer_id = (response.get("PAYERID") or [""])[0].strip()
+
+		if response.get("ACK", [""])[0] != "Success" or not payer_id:
 			frappe.respond_as_web_page(
 				_("Something went wrong"),
 				_(
@@ -307,8 +314,7 @@ def get_express_checkout_details(token):
 			return
 
 		doc = frappe.get_doc("Integration Request", token)
-		payer_id = response.get("PAYERID", [""])[0]
-		payer_email = response.get("EMAIL", [""])[0]
+		payer_email = (response.get("EMAIL") or [""])[0].strip()
 		update_integration_request_status(
 			token,
 			{"payerid": payer_id, "payer_email": payer_email},
@@ -342,12 +348,14 @@ def confirm_payment(token):
 
 		response = make_nvp_request(url, data=params)
 
-		if response.get("ACK", [""])[0] == "Success":
+		txn_id = (response.get("PAYMENTINFO_0_TRANSACTIONID") or [""])[0].strip()
+
+		if response.get("ACK", [""])[0] == "Success" and txn_id:
 			update_integration_request_status(
 				token,
 				{
-					"transaction_id": response.get("PAYMENTINFO_0_TRANSACTIONID", [""])[0],
-					"correlation_id": response.get("CORRELATIONID", [""])[0],
+					"transaction_id": txn_id,
+					"correlation_id": (response.get("CORRELATIONID") or [""])[0].strip(),
 				},
 				"Completed",
 			)
@@ -409,8 +417,9 @@ def create_recurring_profile(token, payerid):
 
 		response = make_nvp_request(url, data=params)
 
-		if response.get("ACK", [""])[0] == "Success":
-			profile_id = response.get("PROFILEID", [""])[0]
+		profile_id = (response.get("PROFILEID") or [""])[0].strip()
+
+		if response.get("ACK", [""])[0] == "Success" and profile_id:
 			update_integration_request_status(
 				token,
 				{
