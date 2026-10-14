@@ -61,3 +61,6 @@ docstring-code-format = true
 [project.urls]
 Repository = "https://github.com/frappe/payments.git"
 "Bug Reports" = "https://github.com/frappe/payments/issues"
+
+[tool.bench.frappe-dependencies]
+frappe = ">=15.0.0-dev,<17.0.0"
