@@ -1,0 +1,114 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:gateway_name",
+ "creation": "2024-01-01 00:00:00.000000",
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "gateway_name",
+  "api_user_id",
+  "api_key",
+  "subscription_key",
+  "target_environment",
+  "callback_url",
+  "enabled",
+  "column_break_1",
+  "use_sandbox",
+  "supported_currencies"
+ ],
+ "fields": [
+  {
+   "fieldname": "gateway_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Gateway Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "api_user_id",
+   "fieldtype": "Data",
+   "label": "API User ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "api_key",
+   "fieldtype": "Password",
+   "label": "API Key",
+   "reqd": 1
+  },
+  {
+   "fieldname": "subscription_key",
+  "fieldtype": "Password",
+   "label": "Subscription Key (Ocp-Apim-Subscription-Key)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "target_environment",
+   "fieldtype": "Select",
+   "label": "Target Environment",
+   "options": "sandbox\nmtnuganda\nmtnghana\nmtncameroon\nmtnzambia\nmtnliberia\nmtnrwanda\nmtnbenin\nmtncongodrc",
+   "default": "sandbox"
+  },
+  {
+   "fieldname": "callback_url",
+   "fieldtype": "Data",
+   "label": "Callback URL",
+   "read_only": 1,
+   "description": "Auto-populated on save. Must be publicly reachable (HTTPS) for MTN to call back."
+  },
+  {
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "label": "Enabled",
+   "default": "1"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "use_sandbox",
+   "fieldtype": "Check",
+   "label": "Use Sandbox",
+   "default": "1",
+   "description": "When checked, all requests go to sandbox.momodeveloper.mtn.com and target_environment is forced to 'sandbox'."
+  },
+  {
+   "fieldname": "supported_currencies",
+   "fieldtype": "Small Text",
+   "label": "Supported Currencies",
+   "description": "Comma-separated ISO 4217 currency codes accepted by this gateway, e.g.: UGX,GHS,XAF,ZMW,LRD,RWF,BIF,EUR",
+   "default": "UGX,GHS,XAF,ZMW,LRD,RWF,BIF,EUR"
+  }
+ ],
+ "links": [],
+ "modified": "2024-01-01 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Payment Gateways",
+"name": "MoMo Settings",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
+
