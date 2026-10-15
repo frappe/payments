@@ -15,6 +15,7 @@ from frappe.utils import set_request
 from payments.payment_gateways.doctype.mpesa_settings.mpesa_settings import (
 	create_mode_of_payment,
 	generate_stk_push,
+	get_account_balance,
 	process_balance_info,
 	verify_transaction,
 )
@@ -93,14 +94,58 @@ class TestMpesaSettings(PaymentsTestSuite):
 		verify_callback(callback_response, token)
 		self.assertEqual(frappe.db.get_value("Integration Request", checkout_id, "status"), "Failed")
 
+	@patch("payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.MpesaConnector")
+	def test_balance_callback_url_carries_token(
+		self, mock_connector, mock_stk_push, mock_get_account_balance
+	):
+		# run the real account balance request so the callback url sent to mpesa is checked
+		mock_get_account_balance.side_effect = get_account_balance
+		mock_connector.return_value.get_balance.return_value = get_test_account_balance_response()
+
+		# the callback url is built from the request that starts the balance request
+		set_request(method="POST", base_url="https://pos.example.com")
+		frappe.get_doc("Mpesa Settings", "_Account Balance").get_account_balance_info()
+
+		# the result url and the queue timeout url both go to the callback handler
+		balance_args = mock_connector.return_value.get_balance.call_args.args
+		self.assertEqual(balance_args[5], balance_args[6])
+		callback_url = urlparse(balance_args[5])
+		self.assertEqual(
+			callback_url.path,
+			"/api/method/payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.process_balance_info",
+		)
+		token = parse_qs(callback_url.query)["token"][0]
+
+		# the callback handler must accept the token sent to mpesa
+		verify_callback(get_account_balance_callback_payload(), token, process_balance_info)
+		self.assertEqual(
+			frappe.db.get_value("Integration Request", "AG_20200927_00007cdb1f9fb6494315", "status"),
+			"Completed",
+		)
+
 	def test_processing_of_account_balance(self, mock_stk_push, mock_get_account_balance):
 		mock_get_account_balance.return_value = get_test_account_balance_response()
 
 		mpesa_doc = frappe.get_doc("Mpesa Settings", "_Account Balance")
 		mpesa_doc.get_account_balance_info()
+		callback_token = mock_get_account_balance.call_args.kwargs.get("callback_token")
+
+		# forged callback without the token sent with the balance request must not change anything
+		forged_response = get_account_balance_callback_payload()
+		forged_response["Result"]["ResultParameters"]["ResultParameter"][0][
+			"Value"
+		] = "Working Account|KES|1.00|1.00|0.00|0.00"
+		for token in (None, "wrong-token"):
+			self.assertRaises(
+				frappe.AuthenticationError, verify_callback, forged_response, token, process_balance_info
+			)
+		self.assertEqual(
+			frappe.db.get_value("Integration Request", "AG_20200927_00007cdb1f9fb6494315", "status"), "Queued"
+		)
+		self.assertFalse(frappe.db.get_value("Mpesa Settings", "_Account Balance", "account_balance"))
 
 		callback_response = get_account_balance_callback_payload()
-		process_balance_info(**callback_response)
+		verify_callback(callback_response, callback_token, process_balance_info)
 		integration_request = frappe.get_doc("Integration Request", "AG_20200927_00007cdb1f9fb6494315")
 
 		# test integration request creation and successful update of the status on receiving callback response
@@ -385,11 +430,11 @@ def mock_stk_push_response(callback_tokens):
 	return stk_push
 
 
-def verify_callback(callback_response, token):
-	"""Call the stk callback handler as if the request came to the callback url with the token."""
+def verify_callback(callback_response, token, handler=verify_transaction):
+	"""Call the callback handler as if the request came to the callback url with the token."""
 	set_request(method="POST", query_string={"token": token} if token else None)
 	try:
-		verify_transaction(**callback_response)
+		handler(**callback_response)
 	finally:
 		del frappe.local.request
 
