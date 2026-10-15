@@ -52,6 +52,9 @@ class TestMpesaSettings(PaymentsTestSuite):
 		for x in frappe.db.get_all("POS Opening Entry"):
 			frappe.get_doc("POS Opening Entry", x.name).cancel().delete()
 		frappe.db.sql("delete from `tabMpesa Settings`")
+		# mpesa settings adds this pos invoice only field to pos settings, so remove it before
+		# the invoice type is restored, else pos settings fails to validate for sales invoice
+		frappe.db.delete("POS Field", {"parent": "POS Settings", "fieldname": "request_for_payment"})
 		frappe.db.sql("delete from `tabIntegration Request` where integration_request_service = 'Mpesa'")
 
 	def test_creation_of_payment_gateway(self, mock_stk_push, mock_get_account_balance):
