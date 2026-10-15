@@ -3,6 +3,7 @@
 
 from json import dumps
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 import frappe
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
@@ -13,6 +14,7 @@ from frappe.utils import set_request
 
 from payments.payment_gateways.doctype.mpesa_settings.mpesa_settings import (
 	create_mode_of_payment,
+	generate_stk_push,
 	process_balance_info,
 	verify_transaction,
 )
@@ -56,6 +58,37 @@ class TestMpesaSettings(PaymentsTestSuite):
 		mode_of_payment = create_mode_of_payment("Mpesa-_Test", payment_type="Phone")
 		self.assertTrue(frappe.db.exists("Payment Gateway Account", {"payment_gateway": "Mpesa-_Test"}))
 		self.assertEqual(mode_of_payment.type, "Phone")
+
+	@patch("payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.MpesaConnector")
+	def test_callback_url_carries_token(self, mock_connector, mock_stk_push, mock_get_account_balance):
+		# run the real stk push so the callback url sent to mpesa is checked
+		mock_stk_push.side_effect = generate_stk_push
+		mock_connector.return_value.stk_push.side_effect = (
+			lambda **kwargs: get_payment_request_response_payload(kwargs["amount"])
+		)
+
+		# the callback url is built from the request that starts the stk push
+		set_request(method="POST", base_url="https://pos.example.com")
+		frappe.get_doc("Mpesa Settings", "Payment").request_for_payment(
+			payment_gateway="Mpesa-Payment", sender="0712345678", request_amount=100
+		)
+
+		stk_push_kwargs = mock_connector.return_value.stk_push.call_args.kwargs
+		callback_url = urlparse(stk_push_kwargs["callback_url"])
+		self.assertEqual(
+			callback_url.path,
+			"/api/method/payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.verify_transaction",
+		)
+		token = parse_qs(callback_url.query)["token"][0]
+
+		# the callback handler must accept the token sent to mpesa
+		checkout_id = frappe.get_last_doc(
+			"Integration Request", {"integration_request_service": "Mpesa"}
+		).name
+		callback_response = get_payment_callback_payload(CheckoutRequestID=checkout_id)
+		callback_response["Body"]["stkCallback"]["ResultCode"] = 1032
+		verify_callback(callback_response, token)
+		self.assertEqual(frappe.db.get_value("Integration Request", checkout_id, "status"), "Failed")
 
 	def test_processing_of_account_balance(self, mock_stk_push, mock_get_account_balance):
 		mock_get_account_balance.return_value = get_test_account_balance_response()
