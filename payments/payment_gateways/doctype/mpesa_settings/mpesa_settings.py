@@ -91,12 +91,8 @@ class MpesaSettings(Document):
 			callback_token_hash=get_callback_token_hash(callback_token),
 		)
 
-<<<<<<< HEAD
-		response = frappe._dict(get_account_balance(payload))
-
-=======
 		response = frappe._dict(get_account_balance(payload, callback_token=callback_token))
->>>>>>> e0de51e (fix(mpesa): authenticate account balance callbacks with a per-request token (#265))
+
 		self.handle_api_response("ConversationID", payload, response)
 
 	def handle_api_response(self, global_id, request_dict, response):
