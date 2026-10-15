@@ -64,12 +64,15 @@ app_license = "MIT"
 # ------------
 
 before_install = "payments.utils.before_install"
-after_install = "payments.utils.make_custom_fields"
+after_install = "payments.utils.after_install"
+
+before_migrate = "payments.utils.validate_erpnext_compatibility"
+after_migrate = "payments.utils.reconcile_erpnext_custom_fields"
 
 # Uninstallation
 # ------------
 
-before_uninstall = "payments.utils.delete_custom_fields"
+before_uninstall = "payments.utils.before_uninstall"
 # after_uninstall = "pay.uninstall.after_uninstall"
 
 # Desk Notifications
