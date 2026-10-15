@@ -63,7 +63,7 @@ More Details:
 """
 
 import json
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode
 from zoneinfo import ZoneInfo
 
 import frappe
@@ -76,6 +76,26 @@ from frappe.utils.data import get_system_timezone
 from payments.utils import create_payment_gateway
 
 api_path = "/api/method/payments.payment_gateways.doctype.paypal_settings.paypal_settings"
+
+
+def parse_nvp_response(response):
+	"""Parse PayPal NVP (Name-Value Pair) response into a dictionary of lists.
+
+	PayPal NVP API returns URL-encoded key-value pairs (e.g. 'ACK=Success&TOKEN=...').
+	make_post_request returns raw string or bytes when the content is not JSON.
+	"""
+	if isinstance(response, bytes):
+		response = response.decode("utf-8")
+	if isinstance(response, str):
+		response = parse_qs(response)
+	return response
+
+
+def make_nvp_request(url, data):
+	"""Make POST request to PayPal NVP API and parse the URL-encoded response."""
+	response = make_post_request(url=url, data=data)
+	return parse_nvp_response(response)
+
 
 
 class PayPalSettings(Document):
@@ -162,9 +182,9 @@ class PayPalSettings(Document):
 		params = urlencode(params)
 
 		try:
-			res = make_post_request(url=url, data=params.encode("utf-8"))
+			res = make_nvp_request(url=url, data=params.encode("utf-8"))
 
-			if res["ACK"][0] == "Failure":
+			if res.get("ACK", [""])[0] != "Success":
 				raise Exception
 
 		except Exception:
@@ -180,10 +200,13 @@ class PayPalSettings(Document):
 		else:
 			return_url = "https://www.paypal.com/cgi-bin/webscr?cmd=_express-checkout&token={0}"
 
+		token = (response.get("TOKEN") or [""])[0].strip()
+		correlation_id = (response.get("CORRELATIONID") or [""])[0].strip()
+
 		kwargs.update(
 			{
-				"token": response.get("TOKEN")[0],
-				"correlation_id": response.get("CORRELATIONID")[0],
+				"token": token,
+				"correlation_id": correlation_id,
 			}
 		)
 
@@ -209,9 +232,11 @@ class PayPalSettings(Document):
 			self.configure_recurring_payments(params, kwargs)
 
 		params = urlencode(params)
-		response = make_post_request(url, data=params.encode("utf-8"))
+		response = make_nvp_request(url, data=params.encode("utf-8"))
 
-		if response.get("ACK")[0] != "Success":
+		token = (response.get("TOKEN") or [""])[0].strip()
+
+		if response.get("ACK", [""])[0] != "Success" or not token:
 			create_request_log(response, service_name="PayPal", status="Failed")
 			frappe.throw(_("Looks like something is wrong with this site's Paypal configuration."))
 
@@ -272,9 +297,11 @@ def get_express_checkout_details(token):
 		params, url = doc.get_paypal_params_and_url()
 		params.update({"METHOD": "GetExpressCheckoutDetails", "TOKEN": token})
 
-		response = make_post_request(url, data=params)
+		response = make_nvp_request(url, data=params)
 
-		if response.get("ACK")[0] != "Success":
+		payer_id = (response.get("PAYERID") or [""])[0].strip()
+
+		if response.get("ACK", [""])[0] != "Success" or not payer_id:
 			frappe.respond_as_web_page(
 				_("Something went wrong"),
 				_(
@@ -287,15 +314,16 @@ def get_express_checkout_details(token):
 			return
 
 		doc = frappe.get_doc("Integration Request", token)
+		payer_email = (response.get("EMAIL") or [""])[0].strip()
 		update_integration_request_status(
 			token,
-			{"payerid": response.get("PAYERID")[0], "payer_email": response.get("EMAIL")[0]},
+			{"payerid": payer_id, "payer_email": payer_email},
 			"Authorized",
 			doc=doc,
 		)
 
 		frappe.local.response["type"] = "redirect"
-		frappe.local.response["location"] = get_redirect_uri(doc, token, response.get("PAYERID")[0])
+		frappe.local.response["location"] = get_redirect_uri(doc, token, payer_id)
 
 	except Exception:
 		frappe.log_error(frappe.get_traceback())
@@ -318,14 +346,16 @@ def confirm_payment(token):
 			}
 		)
 
-		response = make_post_request(url, data=params)
+		response = make_nvp_request(url, data=params)
 
-		if response.get("ACK")[0] == "Success":
+		txn_id = (response.get("PAYMENTINFO_0_TRANSACTIONID") or [""])[0].strip()
+
+		if response.get("ACK", [""])[0] == "Success" and txn_id:
 			update_integration_request_status(
 				token,
 				{
-					"transaction_id": response.get("PAYMENTINFO_0_TRANSACTIONID")[0],
-					"correlation_id": response.get("CORRELATIONID")[0],
+					"transaction_id": txn_id,
+					"correlation_id": (response.get("CORRELATIONID") or [""])[0].strip(),
 				},
 				"Completed",
 			)
@@ -385,19 +415,21 @@ def create_recurring_profile(token, payerid):
 		# "PROFILESTARTDATE": datetime.utcfromtimestamp(get_timestamp(starts_at)).isoformat()
 		params.update({"PROFILESTARTDATE": starts_at.isoformat()})
 
-		response = make_post_request(url, data=params)
+		response = make_nvp_request(url, data=params)
 
-		if response.get("ACK")[0] == "Success":
+		profile_id = (response.get("PROFILEID") or [""])[0].strip()
+
+		if response.get("ACK", [""])[0] == "Success" and profile_id:
 			update_integration_request_status(
 				token,
 				{
-					"profile_id": response.get("PROFILEID")[0],
+					"profile_id": profile_id,
 				},
 				"Completed",
 			)
 
 			if data.get("reference_doctype") and data.get("reference_docname"):
-				data["subscription_id"] = response.get("PROFILEID")[0]
+				data["subscription_id"] = profile_id
 
 				frappe.flags.data = data
 				custom_redirect_to = frappe.get_doc(
@@ -442,13 +474,13 @@ def manage_recurring_payment_profile_status(profile_id, action, args, url):
 		}
 	)
 
-	response = make_post_request(url, data=args)
+	response = make_nvp_request(url, data=args)
 
 	# error code 11556 indicates profile is not in active state(or already cancelled)
 	# thus could not cancel the subscription.
 	# thus raise an exception only if the error code is not equal to 11556
 
-	if response.get("ACK")[0] != "Success" and response.get("L_ERRORCODE0", [])[0] != "11556":
+	if response.get("ACK", [""])[0] != "Success" and response.get("L_ERRORCODE0", [""])[0] != "11556":
 		frappe.throw(_("Failed while amending subscription"))
 
 
@@ -504,9 +536,9 @@ def validate_ipn_request(data):
 	)
 
 	params = urlencode(params)
-	res = make_post_request(url=url, data=params.encode("utf-8"))
+	res = make_nvp_request(url=url, data=params.encode("utf-8"))
 
-	if res["ACK"][0] != "Success":
+	if res.get("ACK", [""])[0] != "Success":
 		_throw()
 
 
