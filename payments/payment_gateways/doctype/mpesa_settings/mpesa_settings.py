@@ -83,11 +83,15 @@ class MpesaSettings(Document):
 
 	@frappe.whitelist()
 	def get_account_balance_info(self):
+		callback_token = frappe.generate_hash()
 		payload = dict(
-			reference_doctype="Mpesa Settings", reference_docname=self.name, doc_details=vars(self)
+			reference_doctype="Mpesa Settings",
+			reference_docname=self.name,
+			doc_details=vars(self),
+			callback_token_hash=get_callback_token_hash(callback_token),
 		)
 
-		response = frappe._dict(get_account_balance(payload))
+		response = frappe._dict(get_account_balance(payload, callback_token=callback_token))
 		self.handle_api_response("ConversationID", payload, response)
 
 	def handle_api_response(self, global_id, request_dict, response):
@@ -225,7 +229,7 @@ def get_callback_token_hash(token):
 
 
 def validate_callback_token(token_hash):
-	"""Reject a callback that does not carry the token sent in the callback url of its stk push."""
+	"""Reject a callback that does not carry the token sent in the callback url of its request."""
 	request = getattr(frappe.local, "request", None)
 	# the callback body is json, so the query string is not part of form_dict
 	token = request.args.get("token") if request else None
@@ -259,7 +263,7 @@ def get_completed_integration_requests_info(reference_doctype, reference_docname
 	return mpesa_receipts, completed_payments
 
 
-def get_account_balance(request_payload):
+def get_account_balance(request_payload, callback_token):
 	"""Call account balance API to send the request to the Mpesa Servers."""
 	try:
 		mpesa_settings = frappe.get_doc("Mpesa Settings", request_payload.get("reference_docname"))
@@ -273,6 +277,7 @@ def get_account_balance(request_payload):
 		callback_url = (
 			get_request_site_address(True)
 			+ "/api/method/payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.process_balance_info"
+			+ f"?token={callback_token}"
 		)
 
 		return connector.get_balance(
@@ -299,11 +304,11 @@ def process_balance_info(**kwargs):
 		frappe.throw(_("Invalid Conversation ID"))
 
 	request = frappe.get_doc("Integration Request", conversation_id)
+	transaction_data = frappe._dict(loads(request.data))
+	validate_callback_token(transaction_data.callback_token_hash)
 
 	if request.status == "Completed":
 		return
-
-	transaction_data = frappe._dict(loads(request.data))
 
 	if account_balance_response["ResultCode"] == 0:
 		try:
