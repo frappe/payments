@@ -2,6 +2,8 @@
 # For license information, please see license.txt
 
 
+import hashlib
+import hmac
 from json import dumps, loads
 
 import frappe
@@ -53,7 +55,10 @@ class MpesaSettings(Document):
 
 		for _i, amount in enumerate(request_amounts):
 			args.request_amount = amount
-			response = frappe._dict(generate_stk_push(**args))
+			# Mpesa callbacks are unsigned, so a secret token in the callback url authenticates them
+			callback_token = frappe.generate_hash()
+			args.callback_token_hash = get_callback_token_hash(callback_token)
+			response = frappe._dict(generate_stk_push(callback_token=callback_token, **args))
 			self.handle_api_response("CheckoutRequestID", args, response)
 
 	def split_request_amount_according_to_transaction_limit(self, args):
@@ -111,6 +116,7 @@ def generate_stk_push(**kwargs):
 		callback_url = (
 			get_request_site_address(True)
 			+ "/api/method/payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.verify_transaction"
+			+ f"?token={args.callback_token}"
 		)
 
 		mpesa_settings = frappe.get_doc("Mpesa Settings", args.payment_gateway[6:])
@@ -161,6 +167,12 @@ def verify_transaction(**kwargs):
 
 	integration_request = frappe.get_doc("Integration Request", checkout_id)
 	transaction_data = frappe._dict(loads(integration_request.data))
+	validate_callback_token(transaction_data.callback_token_hash)
+
+	# a callback replayed after the transaction is settled must not change it
+	if integration_request.status != "Queued":
+		return
+
 	total_paid = 0  # for multiple integration request made against a pos invoice
 	success = False  # for reporting successfull callback to point of sale ui
 
@@ -207,6 +219,20 @@ def verify_transaction(**kwargs):
 			else "",
 		},
 	)
+
+
+def get_callback_token_hash(token):
+	return hashlib.sha256(token.encode()).hexdigest()
+
+
+def validate_callback_token(token_hash):
+	"""Reject a callback that does not carry the token sent in the callback url of its stk push."""
+	request = getattr(frappe.local, "request", None)
+	# the callback body is json, so the query string is not part of form_dict
+	token = request.args.get("token") if request else None
+
+	if not (token and token_hash and hmac.compare_digest(get_callback_token_hash(token), token_hash)):
+		frappe.throw(_("Invalid callback token"), frappe.AuthenticationError)
 
 
 def get_completed_integration_requests_info(reference_doctype, reference_docname, checkout_id):
