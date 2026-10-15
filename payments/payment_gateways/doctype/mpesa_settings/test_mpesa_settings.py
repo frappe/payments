@@ -10,11 +10,9 @@ from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_cus
 from erpnext.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_invoice
 from erpnext.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
 from erpnext.accounts.doctype.pos_profile.test_pos_profile import make_pos_profile
-<<<<<<< HEAD
+
 from frappe.tests.utils import FrappeTestCase, change_settings
-=======
 from frappe.utils import set_request
->>>>>>> 67cd0f6 (fix(mpesa): authenticate stk push callbacks with a per-request token (#262))
 
 from payments.payment_gateways.doctype.mpesa_settings.mpesa_settings import (
 	create_mode_of_payment,
