@@ -37,7 +37,10 @@ class GoCardlessSettings(Document):
 	def on_payment_request_submission(self, data):
 		if data.reference_doctype != "Fees":
 			customer_data = frappe.db.get_value(
-				data.reference_doctype, data.reference_name, ["company", "customer_name"], as_dict=1
+				data.reference_doctype,
+				data.reference_name,
+				["company", "customer", "customer_name"],
+				as_dict=1,
 			)
 
 		data = {
@@ -48,6 +51,9 @@ class GoCardlessSettings(Document):
 			"reference_docname": data.name,
 			"payer_email": data.email_to or frappe.session.user,
 			"payer_name": customer_data.customer_name,
+			# Mandates are keyed by the Customer docname (the Link target), not the
+			# display name, so reuse works under a Customer naming series (#89).
+			"customer": customer_data.customer,
 			"order_id": data.name,
 			"currency": data.currency,
 			"charge_date": data.transaction_date or frappe.utils.nowdate(),
@@ -62,23 +68,28 @@ class GoCardlessSettings(Document):
 		else:
 			return True
 
-	def check_mandate_validity(self, data):
-		if frappe.db.exists("GoCardless Mandate", dict(customer=data.get("payer_name"), disabled=0)):
-			registered_mandate = frappe.db.get_value(
-				"GoCardless Mandate", dict(customer=data.get("payer_name"), disabled=0), "mandate"
-			)
-			self.initialize_client()
-			mandate = self.client.mandates.get(registered_mandate)
+	def get_registered_mandate(self, customer):
+		"""Return the stored GoCardless mandate id for an ERPNext Customer (by docname),
+		or None if the customer has no active registered mandate."""
+		if not customer:
+			return None
+		return frappe.db.get_value("GoCardless Mandate", dict(customer=customer, disabled=0), "mandate")
 
-			if (
-				mandate.status == "pending_customer_approval"
-				or mandate.status == "pending_submission"
-				or mandate.status == "submitted"
-				or mandate.status == "active"
-			):
-				return {"mandate": registered_mandate}, mandate.next_possible_charge_date
-			else:
-				return None, None
+	def check_mandate_validity(self, data):
+		registered_mandate = self.get_registered_mandate(data.get("customer"))
+		if not registered_mandate:
+			return None, None
+
+		self.initialize_client()
+		mandate = self.client.mandates.get(registered_mandate)
+
+		if (
+			mandate.status == "pending_customer_approval"
+			or mandate.status == "pending_submission"
+			or mandate.status == "submitted"
+			or mandate.status == "active"
+		):
+			return {"mandate": registered_mandate}, mandate.next_possible_charge_date
 		else:
 			return None, None
 
