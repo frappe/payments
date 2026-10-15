@@ -3,15 +3,18 @@
 
 from json import dumps
 from unittest.mock import patch
+from urllib.parse import parse_qs, urlparse
 
 import frappe
 from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_customer
 from erpnext.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_invoice
 from erpnext.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
 from erpnext.accounts.doctype.pos_profile.test_pos_profile import make_pos_profile
+from frappe.utils import set_request
 
 from payments.payment_gateways.doctype.mpesa_settings.mpesa_settings import (
 	create_mode_of_payment,
+	generate_stk_push,
 	process_balance_info,
 	verify_transaction,
 )
@@ -59,6 +62,37 @@ class TestMpesaSettings(PaymentsTestSuite):
 		self.assertTrue(frappe.db.exists("Payment Gateway Account", {"payment_gateway": "Mpesa-_Test"}))
 		self.assertEqual(mode_of_payment.type, "Phone")
 
+	@patch("payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.MpesaConnector")
+	def test_callback_url_carries_token(self, mock_connector, mock_stk_push, mock_get_account_balance):
+		# run the real stk push so the callback url sent to mpesa is checked
+		mock_stk_push.side_effect = generate_stk_push
+		mock_connector.return_value.stk_push.side_effect = (
+			lambda **kwargs: get_payment_request_response_payload(kwargs["amount"])
+		)
+
+		# the callback url is built from the request that starts the stk push
+		set_request(method="POST", base_url="https://pos.example.com")
+		frappe.get_doc("Mpesa Settings", "Payment").request_for_payment(
+			payment_gateway="Mpesa-Payment", sender="0712345678", request_amount=100
+		)
+
+		stk_push_kwargs = mock_connector.return_value.stk_push.call_args.kwargs
+		callback_url = urlparse(stk_push_kwargs["callback_url"])
+		self.assertEqual(
+			callback_url.path,
+			"/api/method/payments.payment_gateways.doctype.mpesa_settings.mpesa_settings.verify_transaction",
+		)
+		token = parse_qs(callback_url.query)["token"][0]
+
+		# the callback handler must accept the token sent to mpesa
+		checkout_id = frappe.get_last_doc(
+			"Integration Request", {"integration_request_service": "Mpesa"}
+		).name
+		callback_response = get_payment_callback_payload(CheckoutRequestID=checkout_id)
+		callback_response["Body"]["stkCallback"]["ResultCode"] = 1032
+		verify_callback(callback_response, token)
+		self.assertEqual(frappe.db.get_value("Integration Request", checkout_id, "status"), "Failed")
+
 	def test_processing_of_account_balance(self, mock_stk_push, mock_get_account_balance):
 		mock_get_account_balance.return_value = get_test_account_balance_response()
 
@@ -94,9 +128,8 @@ class TestMpesaSettings(PaymentsTestSuite):
 		"Accounts Settings", {"allow_multi_currency_invoices_against_single_party_account": 1}
 	)
 	def test_processing_of_callback_payload(self, mock_stk_push, mock_get_account_balance):
-		mock_stk_push.side_effect = lambda **kwargs: get_payment_request_response_payload(
-			kwargs["request_amount"]
-		)
+		callback_tokens = {}
+		mock_stk_push.side_effect = mock_stk_push_response(callback_tokens)
 
 		create_opening_entry(self.pos_profile, frappe.session.user)
 		mpesa_account = frappe.db.get_value(
@@ -136,8 +169,19 @@ class TestMpesaSettings(PaymentsTestSuite):
 			"name",
 		)
 
+		# forged callback without the token sent with the stk push must not change anything
+		forged_response = get_payment_callback_payload(
+			Amount=500, CheckoutRequestID=integration_req_id, MpesaReceiptNumber="FAKE12345"
+		)
+		self.assertRaises(frappe.AuthenticationError, verify_callback, forged_response, None)
+		self.assertRaises(frappe.AuthenticationError, verify_callback, forged_response, "wrong-token")
+		self.assertNotEqual(
+			frappe.db.get_value("Integration Request", integration_req_id, "status"), "Completed"
+		)
+		self.assertFalse(frappe.db.get_value("POS Invoice", pos_invoice.name, "mpesa_receipt_number"))
+
 		callback_response = get_payment_callback_payload(Amount=500, CheckoutRequestID=integration_req_id)
-		verify_transaction(**callback_response)
+		verify_callback(callback_response, callback_tokens[integration_req_id])
 		# test creation of integration request
 		integration_request = frappe.get_doc("Integration Request", integration_req_id)
 
@@ -146,6 +190,20 @@ class TestMpesaSettings(PaymentsTestSuite):
 
 		pos_invoice.reload()
 		self.assertEqual(pos_invoice.mpesa_receipt_number, "LGR7OWQX0R")
+
+		# replaying the callback after the transaction is settled must not change anything
+		replayed_response = get_payment_callback_payload(
+			Amount=500, CheckoutRequestID=integration_req_id, MpesaReceiptNumber="FAKE12345"
+		)
+		verify_callback(replayed_response, callback_tokens[integration_req_id])
+		replayed_response["Body"]["stkCallback"]["ResultCode"] = 1032
+		verify_callback(replayed_response, callback_tokens[integration_req_id])
+		self.assertEqual(
+			frappe.db.get_value("Integration Request", integration_req_id, "status"), "Completed"
+		)
+		self.assertEqual(
+			frappe.db.get_value("POS Invoice", pos_invoice.name, "mpesa_receipt_number"), "LGR7OWQX0R"
+		)
 
 		integration_request.delete()
 		pr.reload()
@@ -157,9 +215,8 @@ class TestMpesaSettings(PaymentsTestSuite):
 		"Accounts Settings", {"allow_multi_currency_invoices_against_single_party_account": 1}
 	)
 	def test_processing_of_multiple_callback_payload(self, mock_stk_push, mock_get_account_balance):
-		mock_stk_push.side_effect = lambda **kwargs: get_payment_request_response_payload(
-			kwargs["request_amount"]
-		)
+		callback_tokens = {}
+		mock_stk_push.side_effect = mock_stk_push_response(callback_tokens)
 
 		create_opening_entry(self.pos_profile, frappe.session.user)
 		mpesa_account = frappe.db.get_value(
@@ -213,7 +270,7 @@ class TestMpesaSettings(PaymentsTestSuite):
 				MpesaReceiptNumber=mpesa_receipt_numbers[i],
 			)
 			# handle response manually
-			verify_transaction(**callback_response)
+			verify_callback(callback_response, callback_tokens[integration_req_ids[i]])
 			# test completion of integration request
 			integration_request = frappe.get_doc("Integration Request", integration_req_ids[i])
 			self.assertEqual(integration_request.status, "Completed")
@@ -234,9 +291,8 @@ class TestMpesaSettings(PaymentsTestSuite):
 		"Accounts Settings", {"allow_multi_currency_invoices_against_single_party_account": 1}
 	)
 	def test_processing_of_only_one_success_callback_payload(self, mock_stk_push, mock_get_account_balance):
-		mock_stk_push.side_effect = lambda **kwargs: get_payment_request_response_payload(
-			kwargs["request_amount"]
-		)
+		callback_tokens = {}
+		mock_stk_push.side_effect = mock_stk_push_response(callback_tokens)
 
 		create_opening_entry(self.pos_profile, frappe.session.user)
 		mpesa_account = frappe.db.get_value(
@@ -288,7 +344,7 @@ class TestMpesaSettings(PaymentsTestSuite):
 			MpesaReceiptNumber=mpesa_receipt_numbers[0],
 		)
 		# handle response manually
-		verify_transaction(**callback_response)
+		verify_callback(callback_response, callback_tokens[integration_req_ids[0]])
 		# test completion of integration request
 		integration_request = frappe.get_doc("Integration Request", integration_req_ids[0])
 		self.assertEqual(integration_request.status, "Completed")
@@ -316,6 +372,26 @@ class TestMpesaSettings(PaymentsTestSuite):
 		pr.cancel()
 		pr.delete()
 		pos_invoice.delete()
+
+
+def mock_stk_push_response(callback_tokens):
+	"""Mock the stk push API and record the callback token sent for each checkout request."""
+
+	def stk_push(**kwargs):
+		response = get_payment_request_response_payload(kwargs["request_amount"])
+		callback_tokens[response["CheckoutRequestID"]] = kwargs.get("callback_token")
+		return response
+
+	return stk_push
+
+
+def verify_callback(callback_response, token):
+	"""Call the stk callback handler as if the request came to the callback url with the token."""
+	set_request(method="POST", query_string={"token": token} if token else None)
+	try:
+		verify_transaction(**callback_response)
+	finally:
+		del frappe.local.request
 
 
 def create_mpesa_settings(payment_gateway_name="Express"):
