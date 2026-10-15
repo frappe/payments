@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
+from frappe.utils.logging import get_log_db
 
 from payments.payment_gateways.doctype.razorpay_settings.razorpay_settings import RazorpaySettings
 from payments.payment_gateways.doctype.razorpay_settings.webhook import (
@@ -102,14 +103,14 @@ class TestRazorpayWebhookEndpoint(IntegrationTestCase):
 
 	def test_a_bad_signature_is_answered_normally_and_left_in_the_error_log(self):
 		integration_requests = frappe.db.count("Integration Request")
-		error_logs = frappe.db.count("Error Log")
+		error_logs = get_log_db().count("Error Log")
 
 		response, enqueue = self.post("deadbeef")
 
 		self.assertIsNone(response)
 		enqueue.assert_not_called()
 		self.assertEqual(frappe.db.count("Integration Request"), integration_requests)
-		self.assertEqual(frappe.db.count("Error Log"), error_logs + 1)
+		self.assertEqual(get_log_db().count("Error Log"), error_logs + 1)
 
 	def test_a_rejection_names_its_cause_and_the_delivery_it_came_from(self):
 		self.post("deadbeef", event_id="evt_9f3c")
