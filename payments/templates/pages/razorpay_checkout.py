@@ -34,6 +34,22 @@ def get_context(context):
 
 		payment_details = json.loads(doc.data)
 
+		if not doc.get("reference_docname") or not doc.get("reference_doctype"):
+			redirect_to_checkout_message(
+				_("Invalid Payment Request"),
+				_("Reference doctype and document name are required."),
+			)
+
+		reference_docstatus = frappe.db.get_value(
+			doc.get("reference_doctype"), doc.get("reference_docname"), "docstatus"
+		)
+		if reference_docstatus == 2:
+			redirect_to_checkout_message(
+				_("Payment Request Cancelled"),
+				_("This payment request has been cancelled."),
+				http_status_code=410,
+			)
+
 		for key in expected_keys:
 			context[key] = payment_details[key]
 
@@ -43,16 +59,31 @@ def get_context(context):
 			payment_details["subscription_id"] if payment_details.get("subscription_id") else ""
 		)
 
+	except frappe.Redirect:
+		raise
 	except Exception:
-		frappe.redirect_to_message(
+		redirect_to_checkout_message(
 			_("Invalid Token"),
 			_("Seems token you are using is invalid!"),
-			http_status_code=400,
-			indicator_color="red",
 		)
 
-		frappe.local.flags.redirect_location = frappe.local.response.location
-		raise frappe.Redirect
+
+def redirect_to_checkout_message(
+	title,
+	message,
+	http_status_code=400,
+	indicator_color="red",
+	context=None,
+):
+	frappe.redirect_to_message(
+		title,
+		message,
+		http_status_code=http_status_code,
+		context=context,
+		indicator_color=indicator_color,
+	)
+	frappe.local.flags.redirect_location = frappe.local.response.location
+	raise frappe.Redirect
 
 
 def get_api_key():
