@@ -140,3 +140,41 @@
     margin-top: 6px;
   }
 }
+
+/* Card Details hosts Stripe's multi-field Payment Element (Link + card + save-card),
+   which sizes itself. Override the single-line .field box so it is never clipped and
+   the Pay button drops below it instead of overlapping. */
+.stripe label.card-details {
+  height: auto;
+  line-height: normal;
+}
+
+.stripe label.card-details > span {
+  width: 100%;
+  float: none;
+  margin-bottom: 8px;
+}
+
+#card-element {
+  float: none;
+  width: 100%;
+  height: auto;
+  background: #fff;
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px 0 #e6ebf1;
+}
+
+.stripe button {
+  clear: both;
+}
+
+.stripe label.save-card {
+  height: auto;
+  line-height: normal;
+}
+
+.stripe label.save-card > span {
+  width: auto;
+  float: none;
+}
