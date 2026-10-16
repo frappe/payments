@@ -1,0 +1,120 @@
+{
+    "custom_fields": [
+        {
+            "dt": "Web Form",
+            "fieldname": "payments_tab",
+            "fieldtype": "Tab Break",
+            "label": "Payments",
+            "insert_after": "custom_css",
+            "is_system_generated": 1
+        },
+        {
+            "default": "0",
+            "dt": "Web Form",
+            "fieldname": "accept_payment",
+            "fieldtype": "Check",
+            "label": "Accept Payments",
+            "insert_after": "payments_tab",
+            "is_system_generated": 1
+        },
+        {
+            "depends_on": "accept_payment",
+            "dt": "Web Form",
+            "fieldname": "payments_sb",
+            "fieldtype": "Section Break",
+            "insert_after": "accept_payment",
+            "is_system_generated": 1
+        },
+        {
+            "depends_on": "eval:!doc.amount_based_on_field",
+            "dt": "Web Form",
+            "fieldname": "amount",
+            "fieldtype": "Currency",
+            "label": "Amount",
+            "insert_after": "payments_sb",
+            "is_system_generated": 1
+        },
+        {
+            "dt": "Web Form",
+            "fieldname": "currency",
+            "fieldtype": "Link",
+            "label": "Currency",
+            "options": "Currency",
+            "insert_after": "amount",
+            "is_system_generated": 1
+        },
+        {
+            "dt": "Web Form",
+            "fieldname": "payment_gateway",
+            "fieldtype": "Link",
+            "label": "Payment Gateway",
+            "options": "Payment Gateway",
+            "insert_after": "currency",
+            "is_system_generated": 1
+        },
+        {
+            "dt": "Web Form",
+            "fieldname": "payments_cb",
+            "fieldtype": "Column Break",
+            "insert_after": "payment_gateway",
+            "is_system_generated": 1
+        },
+        {
+            "default": "0",
+            "dt": "Web Form",
+            "fieldname": "amount_based_on_field",
+            "fieldtype": "Check",
+            "label": "Amount Based On Field",
+            "insert_after": "payments_cb",
+            "is_system_generated": 1
+        },
+        {
+            "depends_on": "eval:doc.amount_based_on_field",
+            "dt": "Web Form",
+            "fieldname": "amount_field",
+            "fieldtype": "Select",
+            "label": "Amount Field",
+            "insert_after": "amount_based_on_field",
+            "is_system_generated": 1
+        },
+        {
+            "default": "0",
+            "dt": "Web Form",
+            "fieldname": "payer_name_based_on_field",
+            "fieldtype": "Check",
+            "label": "Payer Name Based On Field",
+            "insert_after": "amount_field",
+            "is_system_generated": 1
+        },
+        {
+            "depends_on": "eval:doc.payer_name_based_on_field",
+            "dt": "Web Form",
+            "fieldname": "payer_name_field",
+            "fieldtype": "Select",
+            "label": "Payer Name Field",
+            "insert_after": "payer_name_based_on_field",
+            "is_system_generated": 1
+        },
+        {
+            "default": "0",
+            "dt": "Web Form",
+            "fieldname": "payer_email_based_on_field",
+            "fieldtype": "Check",
+            "label": "Payer Email Based On Field",
+            "insert_after": "payer_name_field",
+            "is_system_generated": 1
+        },
+        {
+            "depends_on": "eval:doc.payer_email_based_on_field",
+            "dt": "Web Form",
+            "fieldname": "payer_email_field",
+            "fieldtype": "Select",
+            "label": "Payer Email Field",
+            "insert_after": "payer_email_based_on_field",
+            "is_system_generated": 1
+        }
+    ],
+    "property_setters": [],
+    "sync_on_migrate": 1,
+    "doctype": "Web Form"
+}
