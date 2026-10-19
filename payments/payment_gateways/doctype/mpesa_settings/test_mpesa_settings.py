@@ -10,7 +10,6 @@ from erpnext.accounts.doctype.payment_entry.test_payment_entry import create_cus
 from erpnext.accounts.doctype.pos_invoice.test_pos_invoice import create_pos_invoice
 from erpnext.accounts.doctype.pos_opening_entry.test_pos_opening_entry import create_opening_entry
 from erpnext.accounts.doctype.pos_profile.test_pos_profile import make_pos_profile
-
 from frappe.tests.utils import FrappeTestCase, change_settings
 from frappe.utils import set_request
 
@@ -69,8 +68,8 @@ class TestMpesaSettings(FrappeTestCase):
 	def test_callback_url_carries_token(self, mock_connector, mock_stk_push, mock_get_account_balance):
 		# run the real stk push so the callback url sent to mpesa is checked
 		mock_stk_push.side_effect = generate_stk_push
-		mock_connector.return_value.stk_push.side_effect = (
-			lambda **kwargs: get_payment_request_response_payload(kwargs["amount"])
+		mock_connector.return_value.stk_push.side_effect = lambda **kwargs: (
+			get_payment_request_response_payload(kwargs["amount"])
 		)
 
 		# the callback url is built from the request that starts the stk push
@@ -134,9 +133,9 @@ class TestMpesaSettings(FrappeTestCase):
 
 		# forged callback without the token sent with the balance request must not change anything
 		forged_response = get_account_balance_callback_payload()
-		forged_response["Result"]["ResultParameters"]["ResultParameter"][0][
-			"Value"
-		] = "Working Account|KES|1.00|1.00|0.00|0.00"
+		forged_response["Result"]["ResultParameters"]["ResultParameter"][0]["Value"] = (
+			"Working Account|KES|1.00|1.00|0.00|0.00"
+		)
 		for token in (None, "wrong-token"):
 			self.assertRaises(
 				frappe.AuthenticationError, verify_callback, forged_response, token, process_balance_info
