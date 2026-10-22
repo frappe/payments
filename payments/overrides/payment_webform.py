@@ -6,8 +6,6 @@ from frappe.rate_limiter import rate_limit
 from frappe.utils import flt
 from frappe.website.doctype.web_form.web_form import WebForm
 
-from payments.utils import get_payment_gateway_controller
-
 
 class PaymentWebForm(WebForm):
 	def validate(self):
@@ -24,8 +22,6 @@ class PaymentWebForm(WebForm):
 
 	def get_payment_gateway_url(self, doc):
 		if getattr(self, "accept_payment", False):
-			controller = get_payment_gateway_controller(self.payment_gateway)
-
 			title = f"Payment for {doc.doctype} {doc.name}"
 			amount = self.amount
 			if self.amount_based_on_field:
@@ -49,8 +45,13 @@ class PaymentWebForm(WebForm):
 				"redirect_to": frappe.utils.get_url(self.success_url or self.route),
 			}
 
-			# Redirect the user to this url
-			return controller.get_payment_url(**payment_details)
+			# Redirect the user to this url. build_checkout_url dispatches on the
+			# gateway generation: v2 controllers take a session name, not **kwargs.
+			# NOT the whitelisted get_checkout_url, which refuses v2 outright — see
+			# its resolution note. This is a server-side caller.
+			from payments.utils.utils import build_checkout_url
+
+			return build_checkout_url(payment_gateway=self.payment_gateway, **payment_details)
 
 
 @frappe.whitelist(allow_guest=True)
