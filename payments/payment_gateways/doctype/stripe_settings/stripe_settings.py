@@ -272,7 +272,9 @@ class StripeSettings(Document):
 			redirect_url += "?" + urlencode({"redirect_to": redirect_to})
 
 		if redirect_message:
-			redirect_url += "&" + urlencode({"redirect_message": redirect_message})
+			redirect_url += ("&" if "?" in redirect_url else "?") + urlencode(
+				{"redirect_message": redirect_message}
+			)
 
 		return {"redirect_to": redirect_url, "status": status}
 
