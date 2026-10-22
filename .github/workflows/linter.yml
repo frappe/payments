@@ -60,3 +60,19 @@ jobs:
 
       - name: Semgrep for Test Correctness
         run: semgrep ci --include=**/test_*.py --config ./semgrep/test-correctness.yml
+
+  deps-vulnerable-check:
+    name: 'Vulnerable Dependency Check'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+
+      - name: Install and run pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit --desc on .
