@@ -1,0 +1,31 @@
+
+{% extends "templates/web.html" %}
+
+{% block title %} Payment {% endblock %}
+
+{%- block header -%}
+<head>
+        <title>Merchant Checkout Page</title>
+</head>
+{% endblock %}
+
+{%- block page_content -%}
+
+<p class='lead text-center centered'>
+	<span class='phonepe-loading'>Loading Payment System</span>
+	<script>
+		window.location.href = "{{ payment_url }}";
+	</script>
+	<span class='phonepe-confirming hidden'>Confirming Payment</span>
+</p>
+
+{% endblock %}
+
+{% block style %}
+<style>
+	header, footer {
+		display: none;
+	}
+
+</style>
+{% endblock %}
