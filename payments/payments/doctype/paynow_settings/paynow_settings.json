@@ -1,0 +1,114 @@
+{
+ "actions": [],
+ "autoname": "field:payment_gateway_name",
+ "creation": "2026-01-12 14:57:39.193955",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "payment_gateway_name",
+  "account_email",
+  "column_break_ogtk",
+  "append_customer_details",
+  "in_test_mode",
+  "integrations_section",
+  "integrations",
+  "test_mode_section",
+  "test_base_url",
+  "column_break_zdaz",
+  "test_mode"
+ ],
+ "fields": [
+  {
+   "default": "Paynow",
+   "fieldname": "payment_gateway_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Gateway Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "account_email",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Account Email",
+   "options": "Email",
+   "reqd": 1
+  },
+  {
+   "fieldname": "integrations_section",
+   "fieldtype": "Section Break",
+   "label": "Integrations"
+  },
+  {
+   "fieldname": "integrations",
+   "fieldtype": "Table",
+   "options": "Paynow Integration Key"
+  },
+  {
+   "default": "1",
+   "fieldname": "in_test_mode",
+   "fieldtype": "Check",
+   "label": "Enable Test?"
+  },
+  {
+   "default": "0",
+   "fieldname": "append_customer_details",
+   "fieldtype": "Check",
+   "label": "Append Customer Details?"
+  },
+  {
+   "fieldname": "column_break_ogtk",
+   "fieldtype": "Column Break"
+  },
+  {
+   "depends_on": "eval:doc.in_test_mode===1",
+   "fieldname": "test_mode_section",
+   "fieldtype": "Section Break",
+   "label": "Test Mode"
+  },
+  {
+   "default": "none",
+   "fieldname": "test_mode",
+   "fieldtype": "Select",
+   "label": "Mode",
+   "options": "none\nsuccess\ndelayed\ncancelled\ninsufficient funds"
+  },
+  {
+   "fieldname": "test_base_url",
+   "fieldtype": "Data",
+   "label": "Base Url"
+  },
+  {
+   "fieldname": "column_break_zdaz",
+   "fieldtype": "Column Break"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-01-12 15:15:45.104603",
+ "modified_by": "Administrator",
+ "module": "Payments",
+ "name": "Paynow Settings",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
