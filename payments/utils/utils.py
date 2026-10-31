@@ -26,6 +26,17 @@ def get_payment_gateway_controller(payment_gateway):
 			frappe.throw(_("{0} Settings not found").format(payment_gateway))
 
 
+def check_payment_status(reference_doctype, reference_docname):
+    """Verify if payment request is already completed"""
+    try:
+        doc = frappe.get_doc(reference_doctype, reference_docname)
+        return doc.status in ['Paid']
+    except frappe.DoesNotExistError:
+        frappe.throw(_("Payment Request not found"))
+    except Exception as e:
+        frappe.log_error(_("Payment status check failed"), e)
+
+
 @frappe.whitelist(allow_guest=True, xss_safe=True)
 def get_checkout_url(**kwargs):
 	try:
