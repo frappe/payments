@@ -35,7 +35,8 @@ class PaymentWebForm(WebForm):
 
 			if amount is None or Decimal(amount) <= 0:
 				return frappe.utils.get_url(self.success_url or self.route)
-
+			phone = frappe.db.get_value("User", frappe.session.user, ["phone", "mobile_no"], as_dict=1)
+			phone = phone.mobile_no or phone.phone
 			payment_details = {
 				"amount": amount,
 				"title": title,
@@ -44,6 +45,7 @@ class PaymentWebForm(WebForm):
 				"reference_docname": doc.name,
 				"payer_email": frappe.session.user,
 				"payer_name": frappe.utils.get_fullname(frappe.session.user),
+				"payer_phone": phone,
 				"order_id": doc.name,
 				"currency": self.currency,
 				"redirect_to": frappe.utils.get_url(self.success_url or self.route),
