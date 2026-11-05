@@ -83,7 +83,8 @@ def make_payment(stripe_token_id, data, reference_doctype=None, reference_docnam
 	else:
 		data = frappe.get_doc("Stripe Settings", gateway_controller).create_request(data)
 
-	frappe.db.commit()
+	# Also reachable over GET, which Frappe does not commit, and the payment must be recorded.
+	frappe.db.commit()  # nosemgrep
 	return data
 
 

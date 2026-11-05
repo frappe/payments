@@ -59,5 +59,6 @@ def make_payment(payload_nonce, data, reference_doctype, reference_docname):
 
 	gateway_controller = get_gateway_controller(reference_docname)
 	data = frappe.get_doc("Braintree Settings", gateway_controller).create_payment_request(data)
-	frappe.db.commit()
+	# Also reachable over GET, which Frappe does not commit, and the payment must be recorded.
+	frappe.db.commit()  # nosemgrep
 	return data
