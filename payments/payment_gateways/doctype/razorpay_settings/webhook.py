@@ -80,7 +80,7 @@ def razorpay_webhook():
 		return
 
 	# The worker reads this row by name, so it has to be there before the job is.
-	frappe.db.commit()  # nosemgrep: frappe-semgrep-rules.rules.frappe-manual-commit
+	frappe.db.commit()  # nosemgrep
 	frappe.enqueue(
 		method="payments.payment_gateways.doctype.razorpay_settings.webhook.handle_refund_notification",
 		queue="short",
