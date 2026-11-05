@@ -1,0 +1,23 @@
+name: Publish to the marketplace
+
+# Every push to a branch Pilot installs opens or updates that branch's release
+# PR in frappe/marketplace, so benches get the new commit once the marketplace
+# check passes. The check builds the assets itself; payments has too few to
+# need prebuilt ones.
+
+on:
+  push:
+    branches: [develop, version-16, version-15]
+  workflow_dispatch:
+
+jobs:
+  marketplace:
+    name: Open the marketplace release PR
+    if: contains(fromJSON('["develop", "version-16", "version-15"]'), github.ref_name)
+    uses: frappe/marketplace/.github/workflows/publish-release.yml@main
+    with:
+      app: payments
+      branch: ${{ github.ref_name }}
+      channel: ${{ github.ref_name == 'develop' && 'nightly' || 'stable' }}
+    secrets:
+      registry_token: ${{ secrets.MARKETPLACE_PR_TOKEN }}
