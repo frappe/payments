@@ -47,6 +47,7 @@ class PaymentWebForm(WebForm):
 				"order_id": doc.name,
 				"currency": self.currency,
 				"redirect_to": frappe.utils.get_url(self.success_url or self.route),
+				"payment_gateway": self.payment_gateway
 			}
 
 			# Redirect the user to this url
