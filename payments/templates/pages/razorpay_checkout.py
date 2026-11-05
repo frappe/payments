@@ -63,8 +63,15 @@ def get_api_key():
 	return api_key
 
 
-@frappe.whitelist(allow_guest=True)
-def make_payment(razorpay_payment_id, options, reference_doctype, reference_docname, token):
+# Guest checkout: buyers pay without a site account.
+@frappe.whitelist(allow_guest=True)  # nosemgrep
+def make_payment(
+	razorpay_payment_id: str,
+	options: str | dict,
+	reference_doctype: str,
+	reference_docname: str,
+	token: str,
+):
 	data = {}
 
 	if isinstance(options, str):

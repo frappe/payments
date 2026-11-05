@@ -51,8 +51,9 @@ def get_context(context):
 		raise frappe.Redirect
 
 
-@frappe.whitelist(allow_guest=True)
-def make_payment(payload_nonce, data, reference_doctype, reference_docname):
+# Guest checkout: buyers pay without a site account.
+@frappe.whitelist(allow_guest=True)  # nosemgrep
+def make_payment(payload_nonce: str, data: str, reference_doctype: str, reference_docname: str):
 	data = json.loads(data)
 
 	data.update({"payload_nonce": payload_nonce})
