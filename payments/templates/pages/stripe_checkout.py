@@ -72,7 +72,8 @@ def get_header_image(doc, gateway_controller):
 
 
 # nosemgrep: frappe-semgrep-rules.rules.security.guest-whitelisted-method
-@frappe.whitelist(allow_guest=True)
+# Guest checkout: buyers pay without a site account.
+@frappe.whitelist(allow_guest=True)  # nosemgrep
 def make_payment(
 	stripe_token_id: str,
 	data: str,
