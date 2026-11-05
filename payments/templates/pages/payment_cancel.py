@@ -9,4 +9,5 @@ def get_context(context):
 
 	if token:
 		frappe.db.set_value("Integration Request", token, "status", "Cancelled")
-		frappe.db.commit()
+		# A page render is a GET, which Frappe does not commit.
+		frappe.db.commit()  # nosemgrep
