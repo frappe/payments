@@ -100,13 +100,14 @@ extend_doctype_class = {"Web Form": "payments.overrides.payment_webform.PaymentW
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"Subscription Plan": {
+		# on_update (post-save), not validate: the Stripe sync makes live API calls,
+		# which must never run inside the save transaction where a Stripe outage
+		# would block/roll back the user's save.
+		"on_update": "payments.payment_gateways.stripe_subscription_sync.sync_stripe_price",
+	},
+}
 
 # Scheduled Tasks
 # ---------------
