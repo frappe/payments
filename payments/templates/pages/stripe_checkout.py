@@ -69,8 +69,15 @@ def get_header_image(doc, gateway_controller):
 	return frappe.db.get_value("Stripe Settings", gateway_controller, "header_img")
 
 
-@frappe.whitelist(allow_guest=True)
-def make_payment(stripe_token_id, data, reference_doctype=None, reference_docname=None, payment_gateway=None):
+# Guest checkout: buyers pay without a site account.
+@frappe.whitelist(allow_guest=True)  # nosemgrep
+def make_payment(
+	stripe_token_id: str,
+	data: str,
+	reference_doctype: str | None = None,
+	reference_docname: str | None = None,
+	payment_gateway: str | None = None,
+):
 	data = json.loads(data)
 
 	data.update({"stripe_token_id": stripe_token_id})
