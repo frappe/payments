@@ -51,13 +51,15 @@ def get_context(context):
 		raise frappe.Redirect
 
 
-@frappe.whitelist(allow_guest=True)
-def make_payment(payload_nonce, data, reference_doctype, reference_docname):
+# Guest checkout: buyers pay without a site account.
+@frappe.whitelist(allow_guest=True)  # nosemgrep
+def make_payment(payload_nonce: str, data: str, reference_doctype: str, reference_docname: str):
 	data = json.loads(data)
 
 	data.update({"payload_nonce": payload_nonce})
 
 	gateway_controller = get_gateway_controller(reference_docname)
 	data = frappe.get_doc("Braintree Settings", gateway_controller).create_payment_request(data)
-	frappe.db.commit()
+	# Also reachable over GET, which Frappe does not commit, and the payment must be recorded.
+	frappe.db.commit()  # nosemgrep
 	return data
