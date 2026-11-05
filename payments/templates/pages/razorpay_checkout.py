@@ -80,5 +80,6 @@ def make_payment(razorpay_payment_id, options, reference_doctype, reference_docn
 	)
 
 	data = frappe.get_doc("Razorpay Settings").create_request(data)
-	frappe.db.commit()
+	# Also reachable over GET, which Frappe does not commit, and the payment must be recorded.
+	frappe.db.commit()  # nosemgrep
 	return data
