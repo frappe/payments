@@ -115,6 +115,11 @@ scheduler_events = {
 	"all": [
 		"payments.payment_gateways.doctype.razorpay_settings.razorpay_settings.capture_payment",
 	],
+	"cron": {
+		"*/10 * * * *": [
+			"payments.payment_gateways.doctype.mollie_settings.webhook.retry_failed_notifications"
+		],
+	},
 }
 
 # Testing
