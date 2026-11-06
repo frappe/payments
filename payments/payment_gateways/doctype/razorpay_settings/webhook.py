@@ -51,7 +51,7 @@ def process_webhook(raw_body: bytes, signature: str, event_id: str = "") -> str 
 
 # Razorpay is not a logged-in user, so this cannot be anything but a guest
 # endpoint. It authenticates on the HMAC signature before it writes anything.
-@frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep
+@frappe.whitelist(allow_guest=True, methods=["POST"])  # nosemgrep: guest-whitelisted-method
 def razorpay_webhook():
 	"""Answer 200 to anything Razorpay should not resend.
 
