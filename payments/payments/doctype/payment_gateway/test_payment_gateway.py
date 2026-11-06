@@ -117,6 +117,33 @@ class TestPaymentGateway(unittest.TestCase):
 		self.addCleanup(frappe.delete_doc, "Payment Gateway", doc.name, force=1)
 		return doc
 
+	def make_accounts_manager(self):
+		email = "test_pg_accounts_manager@example.com"
+		if not frappe.db.exists("User", email):
+			user = frappe.new_doc("User")
+			user.email = email
+			user.first_name = "Accounts Manager"
+			user.send_welcome_email = 0
+			user.insert(ignore_permissions=True)
+			user.add_roles("Accounts Manager")
+		return email
+
+	def test_accounts_manager_can_only_change_accounts(self):
+		gateway = self.insert_payment_gateway("_Test PG Permissions", is_default=1)
+		self.addCleanup(frappe.set_user, "Administrator")
+		frappe.set_user(self.make_accounts_manager())
+
+		doc = frappe.get_doc("Payment Gateway", gateway.name)
+		doc.gateway_settings = "Payment Gateway"
+		doc.payment_gateway_account[0].message = "Pay now"
+		doc.save()
+
+		doc.reload()
+		self.assertIsNone(doc.gateway_settings)
+		self.assertEqual(doc.payment_gateway_account[0].message, "Pay now")
+		self.assertFalse(frappe.has_permission("Payment Gateway", "create"))
+		self.assertFalse(frappe.has_permission("Payment Gateway", "delete"))
+
 	def test_duplicate_company_payment_account_not_allowed(self):
 		doc = self.make_payment_gateway()
 
