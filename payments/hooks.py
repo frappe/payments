@@ -63,8 +63,11 @@ app_license = "MIT"
 # Installation
 # ------------
 
-before_install = "payments.utils.before_install"
-after_install = "payments.utils.make_custom_fields"
+before_install = ["payments.utils.before_install", "payments.utils.validate_erpnext_compatibility"]
+after_install = "payments.utils.after_install"
+
+before_migrate = "payments.utils.validate_erpnext_compatibility"
+after_migrate = "payments.utils.make_payments_erpnext_custom_fields"
 
 # Uninstallation
 # ------------
