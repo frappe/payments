@@ -16,6 +16,7 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Gateway",
+   "permlevel": 1,
    "reqd": 1,
    "unique": 1
   },
@@ -23,17 +24,19 @@
    "fieldname": "gateway_settings",
    "fieldtype": "Link",
    "label": "Gateway Settings",
-   "options": "DocType"
+   "options": "DocType",
+   "permlevel": 1
   },
   {
    "fieldname": "gateway_controller",
    "fieldtype": "Dynamic Link",
    "label": "Gateway Controller",
-   "options": "gateway_settings"
+   "options": "gateway_settings",
+   "permlevel": 1
   }
  ],
  "links": [],
- "modified": "2022-07-24 21:17:03.864719",
+ "modified": "2026-11-06 18:00:00.000000",
  "modified_by": "Administrator",
  "module": "Payments",
  "name": "Payment Gateway",
@@ -46,6 +49,27 @@
    "read": 1,
    "role": "System Manager",
    "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Accounts Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Accounts Manager"
   }
  ],
  "quick_entry": 1,
