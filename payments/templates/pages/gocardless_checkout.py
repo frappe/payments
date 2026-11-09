@@ -55,7 +55,7 @@ def check_mandate(data, reference_doctype, reference_docname):
 
 	client = gocardless_initialization(reference_docname)
 
-	payer = frappe.get_doc("Customer", data["payer_name"])
+	payer = get_payer_customer(data["payer_name"])
 
 	if payer.customer_type == "Individual" and payer.customer_primary_contact is not None:
 		primary_contact = frappe.get_doc("Contact", payer.customer_primary_contact)
@@ -96,3 +96,15 @@ def check_mandate(data, reference_doctype, reference_docname):
 	except Exception:
 		frappe.log_error("GoCardless Payment Error")
 		return {"redirect_to": "payment-failed"}
+
+
+def get_payer_customer(payer_name):
+	"""Resolve the paying Customer from the value the checkout URL carries.
+
+	Payment Request builds the URL with payer_name = customer_name (the display
+	name), which under a Customer naming series is not the Customer docname. Look
+	the Customer up by docname first, then fall back to customer_name (#89)."""
+	if frappe.db.exists("Customer", payer_name):
+		return frappe.get_doc("Customer", payer_name)
+	docname = frappe.db.get_value("Customer", {"customer_name": payer_name}, "name")
+	return frappe.get_doc("Customer", docname or payer_name)
