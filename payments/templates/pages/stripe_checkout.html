@@ -15,18 +15,22 @@
 <div class="stripe" id="payment-section">
 	<div class="col-sm-10 col-sm-offset-2">
 		{% if image %}
-			<img src={{image}}>
+			<img src="{{ image|e }}">
 		{% endif %}
 		<h4 class="text-center">
-			{{description}}
+			{{ description|e }}
 		</h4>
+		{% if test_mode %}
+			<p class="text-center text-muted">{{ _("Test mode: use a Stripe test card. No money is charged.") }}</p>
+		{% endif %}
 		<form id="payment-form">
 			<div class="form-row row">
+				{% if not client_secret %}
 				<div class="group col-12">
 					<div>
 						<label>
 							<span>{{ _("Name") }}</span>
-							<input id="cardholder-name" name="cardholder-name" class="field" placeholder="{{ _('John Doe') }}" value="{{payer_name}}"/>
+							<input id="cardholder-name" name="cardholder-name" class="field" placeholder="{{ _('John Doe') }}" value="{{ payer_name|e }}"/>
 						</label>
 					</div>
 				</div>
@@ -34,10 +38,17 @@
 					<div>
 						<label>
 							<span>{{ _("Email") }}</span>
-							<input id="cardholder-email" name="cardholder-email" class="field" placeholder="{{ _('john@doe.com') }}" value="{{payer_email}}"/>
+							<input id="cardholder-email" name="cardholder-email" class="field" placeholder="{{ _('john@doe.com') }}" value="{{ payer_email|e }}"/>
 						</label>
 					</div>
 				</div>
+				{% endif %}
+				{% if client_secret %}
+				<div class="group col-12 payment-element">
+					<div id="card-element" name="card-element"></div>
+					<div id="card-errors" role="alert"></div>
+				</div>
+				{% else %}
 				<div class="group col-12">
 					<label>
 					<span>{{ _("Card Details") }}</span>
@@ -45,12 +56,13 @@
 				<div id="card-errors" role="alert"></div>
 			</label>
 			</div>
+				{% endif %}
 
 			</div>
-			<button type="submit" class="submit mb-4" id="submit">{{_('Pay')}} {{amount}}</button>
+			<button type="submit" class="submit mb-4" id="submit">{{_('Pay')}} {{ amount|e }}</button>
 			<div class="outcome text-center">
-				<div class="error" hidden>{{ _("An error occured during the payment process. Please contact us.") }}</div>
-				<div class="success" hidden>{{ _("Your payment has been successfully registered.") }}</div>
+				<div class="error" role="alert" hidden>{{ _("An error occured during the payment process. Please contact us.") }}</div>
+				<div class="success" role="status" hidden>{{ _("Your payment has been successfully registered.") }}</div>
 			</div>
 		</form>
 	</div>
