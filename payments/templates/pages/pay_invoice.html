@@ -1,0 +1,36 @@
+{% extends "templates/web.html" %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{%- block page_content -%}
+<div class="page-card">
+	<div class="page-card-head">
+		<span class="indicator {{ indicator or 'blue' }}">{{ title }}</span>
+	</div>
+	{% if message %}
+		<p>{{ message }}</p>
+	{% elif invoices %}
+		<p>{{ _("{0}, these invoices are waiting to be paid. Pay each one online:").format(customer_name) }}</p>
+		<table class="table">
+			<thead>
+				<tr><th>{{ _("Invoice") }}</th><th>{{ _("Due") }}</th><th class="text-right">{{ _("Owed") }}</th><th></th></tr>
+			</thead>
+			<tbody>
+				{% for invoice in invoices %}
+				<tr>
+					<td>{{ invoice.name }}</td>
+					<td>{{ invoice.due_date or "" }}</td>
+					<td class="text-right">{{ invoice.owed }}</td>
+					<td class="text-right"><a class="btn btn-primary btn-sm" href="{{ invoice.link }}">{{ _("Pay") }}</a></td>
+				</tr>
+				{% endfor %}
+			</tbody>
+		</table>
+	{% else %}
+		<p>{{ _("Nothing is waiting to be paid. Thank you.") }}</p>
+	{% endif %}
+</div>
+<style>
+{% include "templates/styles/card_style.css" %}
+</style>
+{% endblock %}
