@@ -1,0 +1,4 @@
+[pre_model_sync]
+
+[post_model_sync]
+payments.patches.v1_0.add_payment_session_log_reference

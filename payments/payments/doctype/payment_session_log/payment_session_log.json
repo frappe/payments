@@ -1,0 +1,185 @@
+{
+ "actions": [],
+ "creation": "2021-04-15 12:29:03.541492",
+ "doctype": "DocType",
+ "document_type": "System",
+ "engine": "InnoDB",
+ "field_order": [
+  "title",
+  "status",
+  "decline_reason",
+  "button",
+  "flow_type",
+  "gateway",
+  "selected_gateway",
+  "mandate",
+  "correlation_id",
+  "tx_data",
+  "initiation_response_payload",
+  "data_capture_payload",
+  "reconciliation",
+  "reconciliation_error",
+  "reconciliation_error_message",
+  "processing_response_payload"
+ ],
+ "fields": [
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Title",
+   "read_only": 1
+  },
+  {
+   "default": "Created",
+   "fieldname": "status",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "gateway",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Gateway",
+   "read_only": 1
+  },
+   {
+    "description": "The payer's chosen gateway. Separate from `gateway`, which is the initiator's restriction and must not be narrowed by a selection.",
+    "in_list_view": 1,
+    "fieldname": "selected_gateway",
+    "in_standard_filter": 1,
+    "fieldtype": "Data",
+    "label": "Selected Gateway",
+    "read_only": 1
+   },
+  {
+   "fieldname": "tx_data",
+   "fieldtype": "Code",
+   "label": "Tx Data",
+   "read_only": 1
+  },
+  {
+   "fieldname": "correlation_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Correlation ID",
+   "read_only": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "flow_type",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Flow Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "mandate",
+   "fieldtype": "Data",
+   "label": "Mandate",
+   "read_only": 1
+  },
+  {
+   "fieldname": "button",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Button",
+   "read_only": 1
+  },
+  {
+   "fieldname": "initiation_response_payload",
+   "fieldtype": "Code",
+   "label": "Initiation Response Payload",
+   "read_only": 1
+  },
+   {
+    "fieldname": "data_capture_payload",
+    "fieldtype": "Code",
+    "label": "Data Capture Payload",
+    "read_only": 1
+   },
+   {
+    "description": "Whether our local bookkeeping for this payment completed. Independent of status, which records only what the gateway did.",
+    "fieldname": "reconciliation",
+    "fieldtype": "Select",
+    "label": "Reconciliation",
+    "options": "\nPending\nDone\nFailed",
+    "read_only": 1
+   },
+   {
+    "depends_on": "eval:doc.reconciliation == 'Failed'",
+    "fieldname": "reconciliation_error",
+    "fieldtype": "Link",
+    "label": "Reconciliation Error",
+    "options": "Error Log",
+    "read_only": 1
+   },
+   {
+    "depends_on": "eval:doc.reconciliation == 'Failed'",
+    "description": "Kept on the log itself: the linked Error Log is cleared after 14 days by frappe's log retention, while this row is retained until reconciliation succeeds.",
+    "fieldname": "reconciliation_error_message",
+    "fieldtype": "Code",
+    "label": "Reconciliation Error Message",
+    "read_only": 1
+   },
+  {
+   "fieldname": "processing_response_payload",
+   "fieldtype": "Code",
+   "label": "Processing Response Payload",
+   "read_only": 1
+  },
+  {
+   "fieldname": "decline_reason",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Decline Reason",
+   "read_only": 1
+  }
+ ],
+ "in_create": 1,
+ "links": [],
+ "modified": "2026-01-19 21:54:25.969842",
+ "modified_by": "Administrator",
+ "module": "Payments",
+ "name": "Payment Session Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title"
+}
