@@ -100,6 +100,30 @@
   color: #CFD7E0;
 }
 
+/* the Payment Element lays itself out; the button goes under it */
+.stripe .payment-element {
+  padding: 16px 0;
+}
+
+#payment-section > div {
+  width: 100%;
+  max-width: 40rem;
+}
+
+.stripe .payment-element .StripeElement {
+  height: auto;
+  padding: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.stripe .form-row:has(.payment-element) + #submit {
+  float: none;
+  width: 100%;
+  max-width: none;
+  margin-top: 8px;
+}
+
 #payment-section {
   min-height: 50vh;
   display: flex;
