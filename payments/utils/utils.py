@@ -60,6 +60,9 @@ def create_payment_gateway(gateway, settings=None, controller=None):
 
 
 def make_custom_fields():
+	from payments.utils.invoice_links import make_fields
+
+	make_fields()
 	if not frappe.get_meta("Web Form").has_field("payments_tab"):
 		click.secho("* Installing Payment Custom Fields in Web Form")
 
@@ -162,6 +165,9 @@ def make_custom_fields():
 
 
 def delete_custom_fields():
+	from payments.utils.invoice_links import delete_fields
+
+	delete_fields()
 	if not frappe.get_meta("Web Form").has_field("payments_tab"):
 		return
 
