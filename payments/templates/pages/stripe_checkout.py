@@ -41,13 +41,38 @@ def get_context(context):
 		context["amount"] = fmt_money(amount=context["amount"], currency=context["currency"])
 
 		if is_a_subscription(context.reference_doctype, context.reference_docname):
-			payment_plan = frappe.db.get_value(
-				context.reference_doctype, context.reference_docname, "payment_plan"
+			# Read plans from the same source the payment flow charges against
+			# (Payment Request.subscription_plans) so the displayed recurrence
+			# can't diverge from what is actually billed.
+			plans = frappe.get_all(
+				"Subscription Plan Detail",
+				filters={
+					"parent": context.reference_docname,
+					"parenttype": context.reference_doctype,
+					"parentfield": "subscription_plans",
+				},
+				pluck="plan",
 			)
-			recurrence = frappe.db.get_value("Payment Plan", payment_plan, "recurrence")
+			if plans:
+				# The amount covers every plan, so only append a recurrence label when
+				# all plans share one cadence; a single label can't honestly describe
+				# a mixed-interval total. One query for every plan's cadence.
+				cadences = {
+					(row.billing_interval, cint(row.billing_interval_count) or 1)
+					for row in frappe.get_all(
+						"Subscription Plan",
+						filters={"name": ("in", plans)},
+						fields=["billing_interval", "billing_interval_count"],
+					)
+				}
+				if len(cadences) == 1:
+					billing_interval, billing_interval_count = cadences.pop()
+					if billing_interval_count == 1:
+						recurrence = _("per {0}").format(_(billing_interval))
+					else:
+						recurrence = _("every {0} {1}s").format(billing_interval_count, _(billing_interval))
 
-			context["amount"] = context["amount"] + " " + _(recurrence)
-
+					context["amount"] = context["amount"] + " " + recurrence
 	else:
 		frappe.redirect_to_message(
 			_("Some information is missing"),
