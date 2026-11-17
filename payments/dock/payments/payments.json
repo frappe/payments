@@ -1,0 +1,20 @@
+{
+ "app": "payments",
+ "docstatus": 0,
+ "doctype": "Dock",
+ "idx": 0,
+ "items": [
+  {
+   "added": 0,
+   "hidden": 0,
+   "icon": "credit-card",
+   "link_to": "Payment Gateways",
+   "link_type": "Sidebar",
+   "title": "Payment Gateways"
+  }
+ ],
+ "mount_on": "erpnext",
+ "name": "payments",
+ "standard": 1,
+ "user": ""
+}
