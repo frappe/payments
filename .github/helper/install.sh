@@ -21,6 +21,9 @@ bench init --skip-assets --frappe-path ~/frappe --python "$(which python)" frapp
 mkdir ~/frappe-bench/sites/test_site
 cp -r "${GITHUB_WORKSPACE}/.github/helper/site_config.json" ~/frappe-bench/sites/test_site/
 
+# The mariadb client requires TLS by default, but the mariadb:10.6 service does not support it.
+printf '[client]\nskip-ssl\n' > ~/.my.cnf
+
 mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL character_set_server = 'utf8mb4'"
 mariadb --host 127.0.0.1 --port 3306 -u root -proot -e "SET GLOBAL collation_server = 'utf8mb4_unicode_ci'"
 
