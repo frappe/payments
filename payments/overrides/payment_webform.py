@@ -3,7 +3,7 @@ import json
 import frappe
 from frappe.core.doctype.file.utils import remove_file_by_url
 from frappe.rate_limiter import rate_limit
-from frappe.utils import flt, get_user_display_id
+from frappe.utils import flt, get_email_address
 from frappe.website.doctype.web_form.web_form import WebForm
 
 from payments.utils import get_payment_gateway_controller
@@ -42,7 +42,7 @@ class PaymentWebForm(WebForm):
 				"description": title,
 				"reference_doctype": doc.doctype,
 				"reference_docname": doc.name,
-				"payer_email": get_user_display_id(),
+				"payer_email": get_email_address(frappe.session.user),
 				"payer_name": frappe.utils.get_fullname(frappe.session.user),
 				"order_id": doc.name,
 				"currency": self.currency,
