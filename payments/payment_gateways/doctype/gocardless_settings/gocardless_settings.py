@@ -9,7 +9,7 @@ import gocardless_pro
 from frappe import _
 from frappe.integrations.utils import create_request_log
 from frappe.model.document import Document
-from frappe.utils import call_hook_method, cint, flt, get_url
+from frappe.utils import call_hook_method, cint, flt, get_email_address, get_url
 
 
 class GoCardlessSettings(Document):
@@ -46,7 +46,7 @@ class GoCardlessSettings(Document):
 			"description": data.subject.encode("utf-8"),
 			"reference_doctype": data.doctype,
 			"reference_docname": data.name,
-			"payer_email": data.email_to or frappe.session.user,
+			"payer_email": data.email_to or get_email_address(frappe.session.user),
 			"payer_name": customer_data.customer_name,
 			"order_id": data.name,
 			"currency": data.currency,

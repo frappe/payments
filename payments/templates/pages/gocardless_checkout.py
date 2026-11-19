@@ -5,7 +5,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import flt, get_url
+from frappe.utils import flt, get_email_address, get_url
 
 from payments.payment_gateways.doctype.gocardless_settings.gocardless_settings import (
 	get_gateway_controller,
@@ -69,10 +69,10 @@ def check_mandate(data, reference_doctype, reference_docname):
 		if primary_contact.email_id is not None:
 			prefilled_customer.update({"email": primary_contact.email_id})
 		else:
-			prefilled_customer.update({"email": frappe.session.user})
+			prefilled_customer.update({"email": get_email_address(frappe.session.user)})
 
 	else:
-		prefilled_customer = {"company_name": payer.name, "email": frappe.session.user}
+		prefilled_customer = {"company_name": payer.name, "email": get_email_address(frappe.session.user)}
 
 	success_url = get_url(
 		"gocardless_confirmation?reference_doctype="
