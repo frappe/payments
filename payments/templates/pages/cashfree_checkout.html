@@ -1,0 +1,48 @@
+{% extends "templates/web.html" %}
+
+{% block title %} {{ _("Payment") }} {% endblock %}
+
+{% block page_content %}
+<div class="checkout-container">
+	<div class="card">
+		<div class="card-body">
+			<h3>{{ _("Payment Summary") }}</h3>
+			<hr>
+			<div class="row">
+				<div class="col-sm-6">
+					<p><b>{{ _("Amount:") }}</b> {{ amount }}</p>
+					<p><b>{{ _("Description:") }}</b> {{ description or "-" }}</p>
+				</div>
+				<div class="col-sm-6">
+					<p><b>{{ _("Order ID:") }}</b> {{ order_id }}</p>
+					<p><b>{{ _("Customer Name:") }}</b> {{ payer_name }}</p>
+				</div>
+			</div>
+			<hr>
+		</div>
+	</div>
+</div>
+{% endblock %}
+
+{% block style %}
+<style>
+	.checkout-container {
+		max-width: 600px;
+		margin: 20px auto;
+	}
+</style>
+{% endblock %}
+
+{% block script %}
+<script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
+<script>
+	frappe.ready(() => {
+		const cashfree = Cashfree({
+			mode: "{{use_sandbox and 'sandbox' or 'prod'}}",
+		});
+		cashfree.checkout({
+			paymentSessionId: "{{payment_session_id}}",
+		});
+	});
+</script>
+{% endblock %}

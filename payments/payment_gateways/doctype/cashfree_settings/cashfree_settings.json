@@ -1,0 +1,74 @@
+{
+ "actions": [],
+ "creation": "2025-03-28 07:17:08.953333",
+ "doctype": "DocType",
+ "document_type": "System",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "api_key",
+  "api_secret",
+  "redirect_to",
+  "use_sandbox",
+  "api_version"
+ ],
+ "fields": [
+  {
+   "fieldname": "api_key",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "API Key",
+   "reqd": 1
+  },
+  {
+   "fieldname": "api_secret",
+   "fieldtype": "Password",
+   "in_list_view": 1,
+   "label": "API Secret",
+   "reqd": 1
+  },
+  {
+   "description": "Mention transaction completion page URL",
+   "fieldname": "redirect_to",
+   "fieldtype": "Data",
+   "label": "Redirect To"
+  },
+  {
+   "default": "0",
+   "fieldname": "use_sandbox",
+   "fieldtype": "Check",
+   "label": "Use Sandbox Environment"
+  },
+  {
+   "fieldname": "api_version",
+   "fieldtype": "Data",
+   "label": "API Version"
+  }
+ ],
+ "in_create": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2025-03-28 09:46:52.701393",
+ "modified_by": "Administrator",
+ "module": "Payment Gateways",
+ "name": "Cashfree Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "read_only": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}
