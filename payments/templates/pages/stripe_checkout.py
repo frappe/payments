@@ -39,6 +39,20 @@ def get_context(context):
 		context.image = get_header_image(context.reference_docname, gateway_controller)
 
 		context["amount"] = fmt_money(amount=context["amount"], currency=context["currency"])
+  
+		try:
+			reference = frappe.get_doc(context.reference_doctype, context.reference_docname)
+			context["amount"] = fmt_money(amount=reference.grand_total, currency=reference.currency)
+		except:
+			frappe.log_error(
+				"Grant Total not found in {}," "For document {}".format(context.reference_doctype, context.reference_docname)
+			)
+			frappe.redirect_to_message(
+				_("Amount and currency could not be determined"),
+				_("Looks like someone sent you to an incomplete URL. Please ask them to look into it."),
+			)
+			frappe.local.flags.redirect_location = frappe.local.response.location
+			raise frappe.Redirect		
 
 		if is_a_subscription(context.reference_doctype, context.reference_docname):
 			payment_plan = frappe.db.get_value(
