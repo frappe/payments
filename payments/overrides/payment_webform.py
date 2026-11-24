@@ -71,14 +71,19 @@ def accept(web_form, data, docname=None, for_payment=False):
 		frappe.throw(frappe._("You are not allowed to update this Web Form Document"))
 
 	frappe.flags.in_web_form = True
-	meta = frappe.get_meta(data.doctype)
+
+	# The Web Form's DocType is authoritative. Standard Frappe web form payloads
+	# don't include `data.doctype`, and a client-supplied value must never decide
+	# which DocType a guest submission creates.
+	doctype = web_form.doc_type
+	meta = frappe.get_meta(doctype)
 
 	if docname:
 		# update
-		doc = frappe.get_doc(data.doctype, docname)
+		doc = frappe.get_doc(doctype, docname)
 	else:
 		# insert
-		doc = frappe.new_doc(data.doctype)
+		doc = frappe.new_doc(doctype)
 
 	# set values
 	for field in web_form.web_form_fields:
