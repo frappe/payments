@@ -1,10 +1,9 @@
-import json
+from decimal import Decimal
 
 import frappe
-from frappe.core.doctype.file.utils import remove_file_by_url
-from frappe.rate_limiter import rate_limit
 from frappe.utils import flt
 from frappe.website.doctype.web_form.web_form import WebForm
+from frappe.website.doctype.web_form.web_form import accept as frappe_web_form_accept
 
 from payments.utils import get_payment_gateway_controller
 
@@ -15,6 +14,12 @@ class PaymentWebForm(WebForm):
 
 		if getattr(self, "accept_payment", False):
 			self.validate_payment_amount()
+
+	def validate_submission(self, doc, uploaded_fields=None):
+		super().validate_submission(doc, uploaded_fields=uploaded_fields)
+
+		if self.get("accept_payment") and not doc.get("paid"):
+			doc.run_method("validate_payment")
 
 	def validate_payment_amount(self):
 		if self.amount_based_on_field and not self.amount_field:
@@ -30,8 +35,6 @@ class PaymentWebForm(WebForm):
 			amount = self.amount
 			if self.amount_based_on_field:
 				amount = doc.get(self.amount_field)
-
-			from decimal import Decimal
 
 			if amount is None or Decimal(amount) <= 0:
 				return frappe.utils.get_url(self.success_url or self.route)
@@ -53,108 +56,27 @@ class PaymentWebForm(WebForm):
 			return controller.get_payment_url(**payment_details)
 
 
-@frappe.whitelist(allow_guest=True)
-@rate_limit(key="web_form", limit=5, seconds=60, methods=["POST"])
-def accept(web_form, data, docname=None, for_payment=False):
-	"""Save the web form"""
-	data = frappe._dict(json.loads(data))
-	for_payment = frappe.parse_json(for_payment)
+@frappe.whitelist(  # nosemgrep: frappe-semgrep-rules.rules.security.guest-whitelisted-method
+	methods=["POST", "PUT"], allow_guest=True
+)
+def accept(
+	web_form: str,
+	data: str | dict,
+	web_form_request_key: str | None = None,
+	for_payment: bool = False,
+):
+	"""Save through Frappe's Web Form handler and add the payment redirect when configured."""
+	response_doc = frappe_web_form_accept(
+		web_form=web_form,
+		data=data,
+		web_form_request_key=web_form_request_key,
+	)
+	payment_web_form = frappe.get_cached_doc("Web Form", web_form)
+	saved_doc = frappe.flags.web_form_doc
 
-	docname = docname or data.name
+	# Keep accepting for_payment for browser/API compatibility, but do not trust it
+	# to decide whether a configured payment can be skipped.
+	if not payment_web_form.get("accept_payment") or saved_doc.get("paid"):
+		return response_doc
 
-	files = []
-	files_to_delete = []
-
-	web_form = frappe.get_doc("Web Form", web_form)
-
-	if docname and not web_form.allow_edit:
-		frappe.throw(frappe._("You are not allowed to update this Web Form Document"))
-
-	frappe.flags.in_web_form = True
-	meta = frappe.get_meta(data.doctype)
-
-	if docname:
-		# update
-		doc = frappe.get_doc(data.doctype, docname)
-	else:
-		# insert
-		doc = frappe.new_doc(data.doctype)
-
-	# set values
-	for field in web_form.web_form_fields:
-		fieldname = field.fieldname
-		df = meta.get_field(fieldname)
-		value = data.get(fieldname, None)
-
-		if df and df.fieldtype in ("Attach", "Attach Image"):
-			if value and "data:" in value and "base64" in value:
-				files.append((fieldname, value))
-				if not doc.name:
-					doc.set(fieldname, "")
-				continue
-
-			elif not value and doc.get(fieldname):
-				files_to_delete.append(doc.get(fieldname))
-
-		doc.set(fieldname, value)
-
-	if for_payment:
-		web_form.validate_mandatory(doc)
-		doc.run_method("validate_payment")
-
-	if doc.name:
-		if web_form.has_web_form_permission(doc.doctype, doc.name, "write"):
-			doc.save(ignore_permissions=True)
-		else:
-			# only if permissions are present
-			doc.save()
-
-	else:
-		# insert
-		if web_form.login_required and frappe.session.user == "Guest":
-			frappe.throw(frappe._("You must login to submit this form"))
-
-		ignore_mandatory = True if files else False
-
-		doc.insert(ignore_permissions=True, ignore_mandatory=ignore_mandatory)
-
-	# add files
-	if files:
-		for f in files:
-			fieldname, filedata = f
-
-			# remove earlier attached file (if exists)
-			if doc.get(fieldname):
-				remove_file_by_url(doc.get(fieldname), doctype=doc.doctype, name=doc.name)
-
-			# save new file
-			filename, dataurl = filedata.split(",", 1)
-			_file = frappe.get_doc(
-				{
-					"doctype": "File",
-					"file_name": filename,
-					"attached_to_doctype": doc.doctype,
-					"attached_to_name": doc.name,
-					"content": dataurl,
-					"decode": True,
-				}
-			)
-			_file.save()
-
-			# update values
-			doc.set(fieldname, _file.file_url)
-
-		doc.save(ignore_permissions=True)
-
-	if files_to_delete:
-		for f in files_to_delete:
-			if f:
-				remove_file_by_url(f, doctype=doc.doctype, name=doc.name)
-
-	frappe.flags.web_form_doc = doc
-
-	if for_payment:
-		# this is needed for Payments app
-		return web_form.get_payment_gateway_url(doc)
-	else:
-		return doc
+	return payment_web_form.get_payment_gateway_url(saved_doc)
