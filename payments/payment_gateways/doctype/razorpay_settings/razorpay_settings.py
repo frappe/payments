@@ -474,6 +474,46 @@ class RazorpaySettings(Document):
 
 		return settings
 
+<<<<<<< HEAD
+=======
+	def fetch_payment(self, payment_id: str) -> dict:
+		with razorpay_api_call("payment fetch"):
+			return self.get_client().payment.fetch(payment_id)
+
+	def fetch_refund(self, refund_id: str) -> dict:
+		with razorpay_api_call("refund fetch"):
+			return self.get_client().refund.fetch(refund_id)
+
+	def fetch_refunds(self, payment_id: str) -> list[dict]:
+		"""Every refund Razorpay holds against a payment. Amounts are in paise."""
+		with razorpay_api_call("refund list"):
+			return self.get_client().payment.fetch_multiple_refund(payment_id).get("items", [])
+
+	def refund_payment(self, payment_id: str, amount: float | None = None) -> dict:
+		"""`amount` is in major units; None refunds whatever is still refundable.
+
+		The returned refund stays `pending` until Razorpay settles it, so callers
+		reconcile via `fetch_refund` or the `refund.processed` webhook.
+		"""
+		payment = self.fetch_payment(payment_id)
+
+		if payment.get("status") != "captured":
+			frappe.throw(_("Only captured payments can be refunded"))
+
+		refundable = from_paise(cint(payment.get("amount")) - cint(payment.get("amount_refunded")))
+		amount = refundable if amount is None else flt(amount)
+
+		if amount <= 0 or amount > refundable:
+			frappe.throw(
+				_("Refund amount must be greater than 0 and at most {0} {1}").format(
+					refundable, payment.get("currency") or ""
+				)
+			)
+
+		with razorpay_api_call("refund"):
+			return self.get_client().payment.refund(payment_id, to_paise(amount))
+
+>>>>>>> 86fefa9 (feat(razorpay): list the refunds on a payment (#251))
 	def cancel_subscription(self, subscription_id):
 		settings = self.get_settings({})
 
